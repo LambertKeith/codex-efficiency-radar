@@ -1,0 +1,32 @@
+{
+  "name": "codex-efficiency-radar",
+  "version": "0.1.0",
+  "description": "Compare composite intelligence and software-engineering scores across Codex models and reasoning efforts.",
+  "author": {
+    "name": "LambertKeith",
+    "url": "https://github.com/LambertKeith"
+  },
+  "homepage": "https://github.com/LambertKeith/codex-efficiency-radar",
+  "repository": "https://github.com/LambertKeith/codex-efficiency-radar",
+  "license": "MIT",
+  "keywords": ["codex", "models", "reasoning", "benchmark", "efficiency"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Efficiency Radar",
+    "shortDescription": "\u67e5\u770b Codex \u6a21\u578b\u5404\u63a8\u7406\u6863\u4f4d\u7684\u53cc\u80fd\u529b\u6548\u7387\u503c",
+    "longDescription": "\u6309\u6a21\u578b\u4e0e\u63a8\u7406\u5f3a\u5ea6\u5c55\u793a CodexRadar \u793e\u533a\u8bc4\u6d4b\u4e2d\u7684\u7efc\u5408\u667a\u80fd\u548c\u8f6f\u4ef6\u5de5\u7a0b\u80fd\u529b\uff0c\u63d0\u4f9b\u6e05\u6670\u7684\u53cc\u6307\u6807\u6807\u8bb0\u3001\u6570\u636e\u65f6\u95f4\u3001\u7f13\u5b58\u72b6\u6001\u4e0e\u624b\u52a8\u5237\u65b0\u6309\u94ae\u3002",
+    "developerName": "LambertKeith",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "defaultPrompt": [
+      "\u6253\u5f00 Codex \u667a\u529b\u6548\u7387\u96f7\u8fbe",
+      "\u5237\u65b0\u4e0d\u540c\u6a21\u578b\u5404\u63a8\u7406\u6863\u4f4d\u7684\u6548\u7387\u503c",
+      "\u6bd4\u8f83 Sol\u3001Terra \u548c Luna \u7684\u7efc\u5408\u667a\u80fd\u4e0e\u5de5\u7a0b\u80fd\u529b"
+    ],
+    "brandColor": "#F3C63F"
+  },
+  "mcpServers": "./.mcp.json"
+}

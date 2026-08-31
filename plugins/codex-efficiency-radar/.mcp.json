@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "codex_efficiency_radar": {
+      "title": "Codex 智力效率雷达",
+      "description": "展示并刷新不同模型、推理强度的综合智能与软件工程能力数值。",
+      "command": "node",
+      "args": [
+        "./dist/server.mjs"
+      ],
+      "cwd": "."
+    }
+  }
+}

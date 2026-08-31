@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex 智力效率雷达</title>
+    <style>/*__WIDGET_CSS__*/</style>
+  </head>
+  <body>
+    <main class="radar-shell" aria-labelledby="radar-title">
+      <div class="atmosphere" aria-hidden="true"></div>
+
+      <header class="radar-header">
+        <div class="title-lockup">
+          <div class="radar-glyph" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div>
+            <p class="eyebrow">CODEX / INTELLIGENCE INDEX</p>
+            <h1 id="radar-title">智力效率雷达</h1>
+          </div>
+        </div>
+
+        <button class="refresh-button" id="refresh-button" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 11a8 8 0 1 0-2.34 5.66M20 5v6h-6" />
+          </svg>
+          <span>刷新效率值</span>
+        </button>
+      </header>
+
+      <section class="control-deck" aria-label="模型与指标说明">
+        <label class="model-control" for="model-select">
+          <span>当前模型</span>
+          <span class="select-wrap">
+            <select id="model-select" aria-describedby="model-hint"></select>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5" /></svg>
+          </span>
+        </label>
+
+        <p id="model-hint" class="legend">
+          <span><i class="legend-chip comprehensive">综</i> 综合智能</span>
+          <span><i class="legend-chip software">工</i> 软件工程</span>
+        </p>
+      </section>
+
+      <section class="score-panel" aria-live="polite" aria-busy="true">
+        <div class="score-heading" aria-hidden="true">
+          <span>推理强度</span>
+          <span>能力指数 / 150</span>
+        </div>
+        <div id="score-list" class="score-list"></div>
+      </section>
+
+      <aside class="status-strip" id="status-strip" aria-live="polite">
+        <span class="status-light" aria-hidden="true"></span>
+        <span id="status-copy">正在接收效率数据…</span>
+      </aside>
+
+      <footer class="radar-footer">
+        <p>
+          <span id="source-time">数据时间：—</span>
+          <span aria-hidden="true">·</span>
+          <span id="cache-status">缓存状态：—</span>
+        </p>
+        <p class="method-note">第三方社区评测数据；刷新表示重新核对源端，不代表重新运行评测。</p>
+      </footer>
+    </main>
+
+    <!--__PREVIEW_BOOTSTRAP__-->
+    <script>/*__WIDGET_JS__*/</script>
+  </body>
+</html>

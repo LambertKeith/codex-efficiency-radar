@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "targets": [
+    {
+      "packageVersion": "26.825.6671.0",
+      "appVersion": "26.825.51511",
+      "executableVersion": "151.0.7922.174",
+      "asarSha256": "86E791E0EB330A1507057D30E450878F7C958E56E04E718F101BA80549E9BAF2",
+      "selectorContract": "data-codex-intelligence-trigger-v1"
+    }
+  ]
+}

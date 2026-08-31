@@ -1,0 +1,20 @@
+{
+  "name": "codex-efficiency-radar",
+  "interface": {
+    "displayName": "Codex Efficiency Radar"
+  },
+  "plugins": [
+    {
+      "name": "codex-efficiency-radar",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-efficiency-radar"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

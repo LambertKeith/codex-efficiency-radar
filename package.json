@@ -1,0 +1,15 @@
+{
+  "name": "codex-efficiency-radar-repository",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Codex Efficiency Radar plugin and optional Windows selector overlay.",
+  "scripts": {
+    "build": "pnpm --filter codex-efficiency-radar run build",
+    "test": "pnpm --filter codex-efficiency-radar run test && pnpm --filter @codex-efficiency-radar/windows-overlay run test",
+    "check": "pnpm run build && pnpm --filter codex-efficiency-radar run check:source && pnpm --filter @codex-efficiency-radar/windows-overlay run check && node scripts/verify-publication.mjs"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  }
+}
