@@ -56,13 +56,19 @@ async function waitForEndpoint(timeoutMs) {
   throw new Error("Codex 调试端口未在预期时间内启动。请完全退出 Codex 后再使用本启动器。 ");
 }
 
-const installation = await locateCodexPackage(config.packageName);
+const installation = await locateCodexPackage(config.packageName, {
+  appPaths: config.macAppPaths
+});
 const target = matchCompatibility(installation, compatibility);
 if (!target) {
-  throw new Error(
+  const message =
     `当前客户端版本尚未审核，已拒绝注入。package=${installation.packageVersion}，` +
-      `app=${installation.appVersion}，exe=${installation.executableVersion}，asar=${installation.asarSha256}`
-  );
+    `app=${installation.appVersion}，exe=${installation.executableVersion}，asar=${installation.asarSha256}`;
+  if (flags.has("--diagnose")) {
+    console.error(`[效率选择器] ${message}`);
+    process.exit(2);
+  }
+  throw new Error(message);
 }
 
 log(`兼容性检查通过：${installation.packageFullName}`);
@@ -76,17 +82,24 @@ if (flags.has("--diagnose")) {
 
 if (!flags.has("--attach") && !(await endpointReady())) {
   if (await isCodexMainProcessRunning(installation.executablePath)) {
-    throw new Error("Codex 已在运行。请完全退出当前客户端，再双击“Codex 效率模式”启动。 ");
+    throw new Error("Codex 已在运行。请完全退出当前客户端，再按效率模式重新启动。");
   }
   log("正在通过受控调试端口启动官方 Codex 客户端…");
-  const child = spawn(
-    installation.executablePath,
-    [
-      `--remote-debugging-port=${config.devtoolsPort}`,
-      "--remote-debugging-address=127.0.0.1"
-    ],
-    { detached: false, stdio: "ignore", windowsHide: false }
-  );
+  const debugArguments = [
+    `--remote-debugging-port=${config.devtoolsPort}`,
+    "--remote-debugging-address=127.0.0.1"
+  ];
+  const command = installation.platform === "darwin"
+    ? "/usr/bin/open"
+    : installation.executablePath;
+  const arguments_ = installation.platform === "darwin"
+    ? ["-na", installation.appBundlePath, "--args", ...debugArguments]
+    : debugArguments;
+  const child = spawn(command, arguments_, {
+    detached: false,
+    stdio: "ignore",
+    windowsHide: installation.platform === "win32"
+  });
   child.on("error", (error) => log(`客户端启动失败：${error.message}`));
 }
 

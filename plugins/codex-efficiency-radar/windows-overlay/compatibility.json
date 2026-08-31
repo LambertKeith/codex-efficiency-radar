@@ -1,11 +1,23 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "targets": [
     {
+      "platform": "win32",
       "packageVersion": "26.825.6671.0",
       "appVersion": "26.825.51511",
       "executableVersion": "151.0.7922.174",
       "asarSha256": "86E791E0EB330A1507057D30E450878F7C958E56E04E718F101BA80549E9BAF2",
+      "selectorContract": "data-codex-intelligence-trigger-v1"
+    },
+    {
+      "platform": "darwin",
+      "arch": "arm64",
+      "packageVersion": "7377",
+      "appVersion": "26.825.51511",
+      "executableVersion": "151.0.7922.174",
+      "bundleIdentifier": "com.openai.codex",
+      "teamIdentifier": "2DC432GLL2",
+      "asarSha256": "F56AC8D5254A10FC4A04E7417FA787D135C3BBCA49BAD7D668D4AE65833D40C7",
       "selectorContract": "data-codex-intelligence-trigger-v1"
     }
   ]

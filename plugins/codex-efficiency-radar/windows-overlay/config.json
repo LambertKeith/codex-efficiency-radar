@@ -1,5 +1,9 @@
 {
   "packageName": "OpenAI.Codex",
+  "macAppPaths": [
+    "/Applications/ChatGPT.app",
+    "/Applications/Codex.app"
+  ],
   "devtoolsPort": 9333,
   "radarClientPath": "../src/radar-client.mjs",
   "targetPollMs": 1000,

@@ -1,6 +1,6 @@
 {
   "name": "codex-efficiency-radar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Visualize CodexRadar intelligence and software-engineering efficiency scores.",
@@ -10,9 +10,9 @@
   "scripts": {
     "start": "node dist/server.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test",
+    "test": "node --test test/mcp-server.test.mjs test/radar-client.test.mjs test/widget-template.test.mjs",
     "check": "pnpm run build && pnpm run check:source",
-    "check:source": "node --check dist/server.mjs && node --check mcp/server.mjs && node --check src/mcp-server.mjs && node --check src/radar-client.mjs && node --check src/widget-template.mjs && node --check web/widget.js && node --test",
+    "check:source": "node --check dist/server.mjs && node --check mcp/server.mjs && node --check src/mcp-server.mjs && node --check src/radar-client.mjs && node --check src/widget-template.mjs && node --check web/widget.js && pnpm run test",
     "preview": "node scripts/preview.mjs",
     "serve:preview": "node scripts/serve-preview.mjs"
   },

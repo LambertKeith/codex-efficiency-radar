@@ -1,18 +1,17 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { appendFile, readFile, rm } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 
 import {
   findCodexMainProcess,
   locateCodexPackage,
-  matchCompatibility
+  matchCompatibility,
+  terminateCodexMainProcess
 } from "./package-locator.mjs";
 
-const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const stateDir = path.join(projectRoot, "state");
 const logPath = path.join(stateDir, "resident.log");
@@ -50,16 +49,7 @@ async function reserveResidentLock() {
 }
 
 async function stopMainProcess(processId) {
-  await execFileAsync(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      `Stop-Process -Id ${processId} -ErrorAction SilentlyContinue`
-    ],
-    { windowsHide: true }
-  );
+  await terminateCodexMainProcess(processId);
 }
 
 async function waitForMainExit(executablePath, processId) {
@@ -80,7 +70,7 @@ function runInjector(attach) {
       cwd: projectRoot,
       detached: false,
       stdio: ["ignore", output, output],
-      windowsHide: true
+      windowsHide: process.platform === "win32"
     }
   );
   return new Promise((resolve) => {
@@ -105,7 +95,9 @@ async function main() {
     throw error;
   }
 
-  const installation = await locateCodexPackage(config.packageName);
+  let installation = await locateCodexPackage(config.packageName, {
+    appPaths: config.macAppPaths
+  });
   if (!matchCompatibility(installation, compatibility)) {
     await log(
       `客户端版本未审核，自动模式保持关闭：${installation.packageVersion} / ${installation.appVersion}`
@@ -129,6 +121,17 @@ async function main() {
     if (ignoredStillRunning && running.processId === ignoredProcessId) {
       await sleep(400);
       continue;
+    }
+
+    installation = await locateCodexPackage(config.packageName, {
+      appPaths: config.macAppPaths
+    });
+    if (!matchCompatibility(installation, compatibility)) {
+      await log(
+        `检测到未审核的客户端更新，自动模式已关闭：${installation.packageVersion} / ${installation.appVersion}`
+      );
+      lock.close();
+      return;
     }
 
     const debugFlag = `--remote-debugging-port=${config.devtoolsPort}`;

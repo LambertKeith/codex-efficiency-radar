@@ -6,7 +6,11 @@ on:
 
 jobs:
   test:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,7 +22,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: Verify committed bundle is current
+        run: git diff --exit-code -- plugins/codex-efficiency-radar/dist/server.mjs
       - name: Verify Windows PowerShell compatibility
+        if: runner.os == 'Windows'
         shell: powershell
         run: |
           $files = Get-ChildItem -Recurse -Filter *.ps1

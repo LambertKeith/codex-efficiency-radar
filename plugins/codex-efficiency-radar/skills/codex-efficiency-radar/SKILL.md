@@ -1,6 +1,6 @@
 ---
 name: codex-efficiency-radar
-description: 展示或刷新 Codex 模型在各推理强度下的综合智能与软件工程能力效率值，并可在 Windows 上配置原生模型选择器增强。用户询问模型档位智力、效率、IQ、软件工程分、打开效率雷达或安装选择器分数时使用。
+description: 展示或刷新 Codex 模型在各推理强度下的综合智能与软件工程能力效率值，并可在 Windows 或 macOS 上配置原生模型选择器增强。用户询问模型档位智力、效率、IQ、软件工程分、打开效率雷达或安装选择器分数时使用。
 ---
 
 # Codex 智力效率雷达
@@ -16,17 +16,20 @@ description: 展示或刷新 Codex 模型在各推理强度下的综合智能与
 5. 当结果包含 `warnings` 或 `source.refreshState` 为 `stale` 时，明确指出正在显示最近一次成功快照。
 6. 当 `source.refreshState` 为 `cooldown` 时，说明源站返回共享缓存；不要声称刷新重新执行了评测。
 
-## Windows 选择器增强
+## 原生选择器增强
 
 当用户明确要求把分数显示在 Codex 原生模型选择器中时：
 
-1. 先说明这不是 OpenAI 官方 UI 扩展接口，而是可选的 Windows 运行时增强。
+1. 先说明这不是 OpenAI 官方 UI 扩展接口，而是可选的 Windows/macOS 运行时增强。
 2. 读取插件根目录的 `SECURITY.md`，了解调试端口和版本兼容边界。
-3. 定位本技能目录的祖先插件根目录，并运行 `scripts/install-selector-overlay.ps1`。
+3. 定位本技能目录的祖先插件根目录：Windows 运行
+   `scripts/install-selector-overlay.ps1`，macOS 运行
+   `node scripts/install-selector-overlay.mjs`；其他平台明确说明不支持选择器增强。
 4. 创建当前用户登录启动项、启用后台进程或重启 Codex 都属于本机状态修改；执行前明确告诉用户将发生什么，并获得确认。
 5. 安装器返回代码 `2` 时，说明当前 Codex 版本尚未审核；不要绕过 `compatibility.json`。
 6. 安装成功后提醒用户完整退出并重新打开 Codex，然后在“模型 → 推理强度”中验证。
-7. 用户要求卸载时，运行 `scripts/uninstall-selector-overlay.ps1`，再提醒其重启 Codex。
+7. 用户要求卸载时，Windows 运行 `scripts/uninstall-selector-overlay.ps1`，
+   macOS 运行 `node scripts/uninstall-selector-overlay.mjs`，再提醒其重启 Codex。
 
 ## 工具选择
 

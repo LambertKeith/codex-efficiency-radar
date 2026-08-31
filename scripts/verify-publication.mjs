@@ -5,10 +5,16 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const required = [
   ".agents/plugins/marketplace.json",
+  "Install.sh",
+  "Uninstall.sh",
+  "scripts/install.mjs",
+  "scripts/uninstall.mjs",
   "plugins/codex-efficiency-radar/.codex-plugin/plugin.json",
   "plugins/codex-efficiency-radar/.mcp.json",
   "plugins/codex-efficiency-radar/dist/server.mjs",
-  "plugins/codex-efficiency-radar/windows-overlay/compatibility.json"
+  "plugins/codex-efficiency-radar/windows-overlay/compatibility.json",
+  "plugins/codex-efficiency-radar/scripts/install-selector-overlay.mjs",
+  "plugins/codex-efficiency-radar/scripts/uninstall-selector-overlay.mjs"
 ];
 const ignoredDirectories = new Set([".git", "node_modules", ".preview", "state"]);
 const disallowedPatterns = [
@@ -43,8 +49,15 @@ for (const filePath of await walk(root)) {
   }
 }
 
-const marketplace = JSON.parse(await readFile(path.join(root, required[0]), "utf8"));
-const manifest = JSON.parse(await readFile(path.join(root, required[1]), "utf8"));
+const marketplace = JSON.parse(
+  await readFile(path.join(root, ".agents/plugins/marketplace.json"), "utf8")
+);
+const manifest = JSON.parse(
+  await readFile(
+    path.join(root, "plugins/codex-efficiency-radar/.codex-plugin/plugin.json"),
+    "utf8"
+  )
+);
 if (marketplace.name !== "codex-efficiency-radar") throw new Error("Unexpected marketplace name");
 if (manifest.name !== "codex-efficiency-radar") throw new Error("Unexpected plugin name");
 
