@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 import { CdpClient } from "./cdp-client.mjs";
 import { buildInjectionSource } from "./injection-script.mjs";
 import {
+  activateWindowsPackagedApp,
   isCodexMainProcessRunning,
   locateCodexPackage,
-  matchCompatibility
+  matchCompatibility,
+  preflightWindowsPackagedAppActivation
 } from "./package-locator.mjs";
 import { createRadarProvider } from "./radar-provider.mjs";
 
@@ -71,6 +73,10 @@ if (!target) {
   throw new Error(message);
 }
 
+if (installation.platform === "win32") {
+  await preflightWindowsPackagedAppActivation(installation.appUserModelId);
+}
+
 log(`兼容性检查通过：${installation.packageFullName}`);
 log(`app.asar 哈希：${installation.asarSha256}`);
 
@@ -89,18 +95,19 @@ if (!flags.has("--attach") && !(await endpointReady())) {
     `--remote-debugging-port=${config.devtoolsPort}`,
     "--remote-debugging-address=127.0.0.1"
   ];
-  const command = installation.platform === "darwin"
-    ? "/usr/bin/open"
-    : installation.executablePath;
-  const arguments_ = installation.platform === "darwin"
-    ? ["-na", installation.appBundlePath, "--args", ...debugArguments]
-    : debugArguments;
-  const child = spawn(command, arguments_, {
-    detached: false,
-    stdio: "ignore",
-    windowsHide: installation.platform === "win32"
-  });
-  child.on("error", (error) => log(`客户端启动失败：${error.message}`));
+  if (installation.platform === "win32") {
+    const processId = await activateWindowsPackagedApp(
+      installation.appUserModelId,
+      debugArguments
+    );
+    log(`已通过 Windows 打包应用激活接口启动 Codex（PID ${processId}）。`);
+  } else {
+    const child = spawn("/usr/bin/open", ["-na", installation.appBundlePath, "--args", ...debugArguments], {
+      detached: false,
+      stdio: "ignore"
+    });
+    child.on("error", (error) => log(`客户端启动失败：${error.message}`));
+  }
 }
 
 await waitForEndpoint(config.startupTimeoutMs);

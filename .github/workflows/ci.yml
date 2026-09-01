@@ -41,3 +41,24 @@ jobs:
               throw (($errors | ForEach-Object Message) -join '; ')
             }
           }
+
+  windows-node24:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @codex-efficiency-radar/windows-overlay check
+      - name: Compile Windows packaged-app activation bridge
+        shell: powershell
+        run: |
+          @'
+          import { preflightWindowsPackagedAppActivation } from "./plugins/codex-efficiency-radar/windows-overlay/src/package-locator.mjs";
+          await preflightWindowsPackagedAppActivation("OpenAI.Codex_test!App");
+          '@ | node --input-type=module

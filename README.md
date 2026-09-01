@@ -13,6 +13,8 @@ Codex 原生推理强度菜单中。
 - 正规 Codex 插件：Windows、macOS、Linux 均可安装，提供交互面板、模型对比和实时刷新；
 - 原生选择器增强：支持已进入精确兼容白名单的 Windows 和 macOS Codex 构建；
 - 完整版本、平台、架构与 `app.asar` 哈希保护，Codex 更新后默认拒绝未知构建；
+- Windows 通过 AppUserModelID 和系统打包应用激活接口启动 MSIX，不直接执行 `WindowsApps` 中的 EXE；
+- 选择器启动失败时自动熔断并停止拦截，必要时恢复标准 Codex，避免反复关闭客户端；
 - 不修改应用安装包、`app.asar`、代码签名、用户对话或 Codex 设置。
 
 Linux 当前没有受支持的 Codex 桌面构建，因此安装器只安装正规插件，不启用选择器增强。
@@ -43,8 +45,16 @@ cd codex-efficiency-radar
 `~/Library/LaunchAgents/com.lambertkeith.codex-efficiency-radar.plist`。
 Windows 运行时仍位于 `%LOCALAPPDATA%\CodexEfficiencyRadar`。
 
-安装不会中断当前 Codex。完成后请完整退出并重新打开 Codex，然后打开
+安装不会中断或强制关闭安装时正在运行的 Codex。安装器若检测到主进程仍存活，
+会明确提示完整退出；Resident 会在确认主进程结束后启动增强模式。然后打开
 “模型 → 推理强度”验证徽标。
+
+Windows 安装器会预检系统打包应用激活接口。后续拦截普通 Codex 时，Resident
+会在普通进程仍存活时先实际调用系统激活接口，并确认调试端口可用，再执行一次
+受控重启。若任何预检、启动或注入步骤失败，Resident 会写入
+`overlay-disabled.json` 后退出，并请求按标准模式恢复 Codex；在重新安装选择器
+增强之前不会继续拦截普通 Codex。确认 Codex 可正常启动后，重新运行安装器即可
+清除熔断标记并再次启用增强。
 
 只安装正规插件：
 

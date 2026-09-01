@@ -58,7 +58,24 @@ const manifest = JSON.parse(
     "utf8"
   )
 );
+const rootPackage = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+const pluginPackage = JSON.parse(
+  await readFile(path.join(root, "plugins/codex-efficiency-radar/package.json"), "utf8")
+);
+const overlayPackage = JSON.parse(
+  await readFile(
+    path.join(root, "plugins/codex-efficiency-radar/windows-overlay/package.json"),
+    "utf8"
+  )
+);
 if (marketplace.name !== "codex-efficiency-radar") throw new Error("Unexpected marketplace name");
 if (manifest.name !== "codex-efficiency-radar") throw new Error("Unexpected plugin name");
+const versions = new Set([
+  rootPackage.version,
+  pluginPackage.version,
+  overlayPackage.version,
+  manifest.version
+]);
+if (versions.size !== 1) throw new Error(`Version mismatch: ${[...versions].join(", ")}`);
 
 console.log("Publication verification passed.");

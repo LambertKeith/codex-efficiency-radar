@@ -1,6 +1,6 @@
 {
   "name": "@codex-efficiency-radar/windows-overlay",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Optional Windows and macOS runtime overlay for the Codex model selector.",
@@ -13,7 +13,7 @@
     "attach": "node src/launcher.mjs --attach",
     "diagnose": "node src/launcher.mjs --diagnose",
     "test": "node --test",
-    "check": "node --check src/activate.mjs && node --check src/cdp-client.mjs && node --check src/injection-script.mjs && node --check src/launcher.mjs && node --check src/package-locator.mjs && node --check src/radar-provider.mjs && node --check src/resident.mjs && node --test"
+    "check": "node --check src/activate.mjs && node --check src/cdp-client.mjs && node --check src/injection-script.mjs && node --check src/launcher.mjs && node --check src/package-locator.mjs && node --check src/radar-provider.mjs && node --check src/resident.mjs && node --check src/runtime-policy.mjs && node --test"
   },
   "devDependencies": {
     "linkedom": "0.18.13"

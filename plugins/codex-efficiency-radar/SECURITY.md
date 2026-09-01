@@ -10,6 +10,18 @@ endpoint bound to `127.0.0.1`, then injects UI
 markup into `app://` pages at runtime. It does not edit the MSIX package,
 `app.asar`, application signatures, user conversations, or Codex settings.
 
+On Windows, the overlay activates the packaged app by AppUserModelID through
+`IApplicationActivationManager::ActivateApplication`; it does not directly spawn
+the executable inside `WindowsApps`. The installer performs a non-launching COM
+activation preflight. Before ending a normal Codex process, the resident verifies
+that the loopback debugging port is available and performs an actual packaged-app
+activation while the normal process is still alive. It only performs the controlled
+restart after those checks succeed. If activation, launch, or injection later fails,
+the resident writes an `overlay-disabled.json` circuit-breaker state, stops
+intercepting normal Codex launches, requests a standard launch without debugging
+arguments when no Codex process is alive, and exits. Re-running the installer is
+required to clear the breaker after the failure has been investigated.
+
 The overlay refuses to run unless the platform, architecture, package or bundle
 version, app version, executable version, and `app.asar` SHA-256 all match a
 reviewed entry in

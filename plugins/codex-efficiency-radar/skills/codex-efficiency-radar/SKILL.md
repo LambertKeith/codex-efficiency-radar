@@ -27,8 +27,9 @@ description: 展示或刷新 Codex 模型在各推理强度下的综合智能与
    `node scripts/install-selector-overlay.mjs`；其他平台明确说明不支持选择器增强。
 4. 创建当前用户登录启动项、启用后台进程或重启 Codex 都属于本机状态修改；执行前明确告诉用户将发生什么，并获得确认。
 5. 安装器返回代码 `2` 时，说明当前 Codex 版本尚未审核；不要绕过 `compatibility.json`。
-6. 安装成功后提醒用户完整退出并重新打开 Codex，然后在“模型 → 推理强度”中验证。
-7. 用户要求卸载时，Windows 运行 `scripts/uninstall-selector-overlay.ps1`，
+6. Windows 安装器会预检打包应用激活接口；安装期间不会结束正在运行的普通 Codex。后续 Resident 只有在实际激活预检和端口检查都成功后才执行一次受控重启。启动或注入失败时会安全熔断并恢复标准 Codex，不要删除或绕过 `overlay-disabled.json` 后继续强制启动。
+7. 安装成功后提醒用户完整退出并重新打开 Codex，然后在“模型 → 推理强度”中验证。
+8. 用户要求卸载时，Windows 运行 `scripts/uninstall-selector-overlay.ps1`，
    macOS 运行 `node scripts/uninstall-selector-overlay.mjs`，再提醒其重启 Codex。
 
 ## 工具选择

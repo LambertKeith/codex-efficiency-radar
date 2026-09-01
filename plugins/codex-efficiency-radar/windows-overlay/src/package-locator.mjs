@@ -19,10 +19,14 @@ async function locateWindowsPackage(packageName) {
   const script = [
     `$package = Get-AppxPackage -Name '${packageName.replaceAll("'", "''")}'`,
     `if ($null -eq $package) { exit 4 }`,
+    `$manifest = Get-AppxPackageManifest -Package $package`,
+    `$applicationId = @($manifest.Package.Applications.Application)[0].Id`,
     `$exe = Join-Path $package.InstallLocation 'app\\ChatGPT.exe'`,
     `[pscustomobject]@{`,
     `  Name = $package.Name`,
     `  PackageFullName = $package.PackageFullName`,
+    `  PackageFamilyName = $package.PackageFamilyName`,
+    `  ApplicationId = $applicationId`,
     `  InstallLocation = $package.InstallLocation`,
     `  Version = $package.Version.ToString()`,
     `  ExecutableVersion = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion`,
@@ -42,12 +46,19 @@ async function locateWindowsPackage(packageName) {
   const owlAppIni = await readFile(owlAppPath, "utf8");
   const appVersion = /^AppVersion=(.+)$/im.exec(owlAppIni)?.[1]?.trim();
   if (!appVersion) throw new Error(`无法从 ${owlAppPath} 读取 AppVersion。`);
+  const applicationId = metadata.ApplicationId?.trim();
+  if (!metadata.PackageFamilyName || !applicationId) {
+    throw new Error("Codex Windows 包缺少 Package Family Name 或 Application ID。");
+  }
 
   return {
     platform: "win32",
     arch: process.arch,
     name: metadata.Name,
     packageFullName: metadata.PackageFullName,
+    packageFamilyName: metadata.PackageFamilyName,
+    applicationId,
+    appUserModelId: `${metadata.PackageFamilyName}!${applicationId}`,
     packageVersion: metadata.Version,
     appVersion,
     executableVersion: metadata.ExecutableVersion,
@@ -226,6 +237,119 @@ export async function terminateCodexMainProcess(processId) {
   process.kill(processId, "SIGTERM");
 }
 
+const WINDOWS_ACTIVATOR_SOURCE = String.raw`
+using System;
+using System.Runtime.InteropServices;
+
+[ComImport, Guid("2e941141-7f97-4756-ba1d-9decde894a3d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IApplicationActivationManager {
+  [PreserveSig]
+  int ActivateApplication(
+    [MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
+    [MarshalAs(UnmanagedType.LPWStr)] string arguments,
+    uint options,
+    out uint processId
+  );
+  [PreserveSig]
+  int ActivateForFile(string appUserModelId, IntPtr itemArray, string verb, out uint processId);
+  [PreserveSig]
+  int ActivateForProtocol(string appUserModelId, IntPtr itemArray, out uint processId);
+}
+
+[ComImport, Guid("45ba127d-10a8-46ea-8ab7-56ea9078943c")]
+class ApplicationActivationManager {}
+
+public static class CodexPackagedAppActivator {
+  public static void Probe() {
+    var manager = new ApplicationActivationManager();
+    Marshal.FinalReleaseComObject(manager);
+  }
+
+  public static uint Activate(string appUserModelId, string arguments) {
+    var manager = (IApplicationActivationManager)new ApplicationActivationManager();
+    uint processId;
+    var result = manager.ActivateApplication(appUserModelId, arguments ?? String.Empty, 0, out processId);
+    if (result < 0) Marshal.ThrowExceptionForHR(result);
+    return processId;
+  }
+}
+`;
+
+function encodedPowerShellValue(value) {
+  return Buffer.from(String(value), "utf16le").toString("base64");
+}
+
+function windowsActivatorPreamble(source = WINDOWS_ACTIVATOR_SOURCE) {
+  const sourceBase64 = encodedPowerShellValue(source);
+  return [
+    `$source = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${sourceBase64}'))`,
+    `Add-Type -TypeDefinition $source -Language CSharp -ErrorAction Stop`
+  ];
+}
+
+export function buildWindowsActivationScript(source, appUserModelId, activationArguments) {
+  const appUserModelIdBase64 = encodedPowerShellValue(appUserModelId);
+  const argumentsBase64 = encodedPowerShellValue(activationArguments);
+  return [
+    ...windowsActivatorPreamble(source),
+    `$appUserModelId = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${appUserModelIdBase64}'))`,
+    `$arguments = [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${argumentsBase64}'))`,
+    `$processId = [CodexPackagedAppActivator]::Activate($appUserModelId, $arguments)`,
+    `[pscustomobject]@{ ProcessId = $processId } | ConvertTo-Json -Compress`
+  ].join("\n");
+}
+
+async function runWindowsActivationScript(script) {
+  return execFileAsync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { windowsHide: true, maxBuffer: 4 * 1024 * 1024 }
+  );
+}
+
+export async function preflightWindowsPackagedAppActivation(appUserModelId) {
+  if (process.platform !== "win32") return;
+  if (typeof appUserModelId !== "string" || !appUserModelId.includes("!")) {
+    throw new Error("Codex Windows 包缺少有效的 AppUserModelID。");
+  }
+  const script = [...windowsActivatorPreamble(), `[CodexPackagedAppActivator]::Probe()`].join("\n");
+  await runWindowsActivationScript(script);
+}
+
+export async function activateWindowsPackagedApp(appUserModelId, launchArguments = []) {
+  if (process.platform !== "win32") {
+    throw new Error("Windows 打包应用激活接口只能在 Windows 上使用。");
+  }
+  if (typeof appUserModelId !== "string" || !appUserModelId.includes("!")) {
+    throw new Error("Codex Windows 包缺少有效的 AppUserModelID。");
+  }
+  const argumentString = Array.isArray(launchArguments)
+    ? launchArguments.join(" ")
+    : String(launchArguments ?? "");
+  const script = buildWindowsActivationScript(
+    WINDOWS_ACTIVATOR_SOURCE,
+    appUserModelId,
+    argumentString
+  );
+  const { stdout } = await runWindowsActivationScript(script);
+  const result = JSON.parse(stdout.trim());
+  const processId = Number(result.ProcessId);
+  if (!Number.isInteger(processId) || processId <= 0) {
+    throw new Error("Windows 打包应用激活接口没有返回有效进程 ID。");
+  }
+  return processId;
+}
+
+export async function restoreWindowsPackagedApp(appUserModelId) {
+  try {
+    return await activateWindowsPackagedApp(appUserModelId, []);
+  } catch {
+    const shellTarget = `shell:AppsFolder\\${appUserModelId}`;
+    await execFileAsync("explorer.exe", [shellTarget], { windowsHide: true });
+    return null;
+  }
+}
+
 export function matchCompatibility(installation, compatibility) {
   const installationPlatform = installation.platform ?? "win32";
   return compatibility.targets.find((target) => {
@@ -238,6 +362,7 @@ export function matchCompatibility(installation, compatibility) {
       target.asarSha256.toUpperCase() === installation.asarSha256.toUpperCase();
     if (!commonMatch) return false;
     if (target.arch && target.arch !== installation.arch) return false;
+    if (target.appUserModelId && target.appUserModelId !== installation.appUserModelId) return false;
     if (target.bundleIdentifier && target.bundleIdentifier !== installation.bundleIdentifier) return false;
     if (target.teamIdentifier && target.teamIdentifier !== installation.teamIdentifier) return false;
     return true;

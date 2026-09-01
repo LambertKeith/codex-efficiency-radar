@@ -11,6 +11,7 @@ $runnerPath = Join-Path $overlayRoot 'Run-Resident.ps1'
 $sourceLauncherPath = Join-Path $sourceOverlayRoot 'src\launcher.mjs'
 $stateDir = Join-Path $overlayRoot 'state'
 $ignorePath = Join-Path $stateDir 'ignore-once.pid'
+$disabledPath = Join-Path $stateDir 'overlay-disabled.json'
 $startupDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'
 $startupPath = Join-Path $startupDir 'CodexEfficiencyRadar.vbs'
 $legacyStartup = Join-Path $startupDir 'CodexEfficiencyResident.vbs'
@@ -53,6 +54,7 @@ foreach ($sourceFile in Get-ChildItem -LiteralPath (Join-Path $sourceOverlayRoot
   Copy-Item -LiteralPath $sourceFile.FullName -Destination $destination -Force
 }
 Copy-Item -LiteralPath (Join-Path $pluginRoot 'src\radar-client.mjs') -Destination (Join-Path $runtimeRoot 'src\radar-client.mjs') -Force
+Remove-Item -LiteralPath $disabledPath -Force -ErrorAction SilentlyContinue
 
 $currentCodex = Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe'" | Where-Object {
   $_.ExecutablePath -match '\\WindowsApps\\OpenAI\.Codex_' -and
@@ -62,6 +64,11 @@ $currentCodex = Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe'" | Whe
 
 if ($null -ne $currentCodex) {
   Set-Content -LiteralPath $ignorePath -Value $currentCodex.ProcessId -Encoding ASCII
+  Write-Warning (
+    'Codex main process PID {0} is still running. Close Codex completely; ' +
+    'closing only the window may leave the process alive. The installer will not stop it.' -f
+    $currentCodex.ProcessId
+  )
 } elseif (Test-Path -LiteralPath $ignorePath) {
   Remove-Item -LiteralPath $ignorePath -Force
 }
@@ -94,7 +101,11 @@ for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
   }
 }
 if ($null -eq $resident) {
+  if (Test-Path -LiteralPath $startupPath) {
+    Remove-Item -LiteralPath $startupPath -Force
+  }
   throw 'The selector resident process did not start.'
 }
 
-Write-Host 'Windows selector overlay installed. It now starts automatically with Windows; restart Codex once to activate it.'
+Write-Host 'Windows selector overlay installed. It starts automatically with Windows.'
+Write-Host 'If Codex was running, exit it completely. Enhanced mode starts after the main process exits.'

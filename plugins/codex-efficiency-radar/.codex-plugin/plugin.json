@@ -1,6 +1,6 @@
 {
   "name": "codex-efficiency-radar",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Compare composite intelligence and software-engineering scores across Codex models and reasoning efforts.",
   "author": {
     "name": "LambertKeith",
