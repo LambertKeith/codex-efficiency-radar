@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -39,6 +40,35 @@ const compatibility = {
     }
   ]
 };
+const reviewedCompatibility = JSON.parse(
+  readFileSync(new URL("../compatibility.json", import.meta.url), "utf8")
+);
+
+test("当前 Windows Codex 构建使用完整身份和哈希精确放行", () => {
+  const currentInstallation = {
+    platform: "win32",
+    arch: "x64",
+    appUserModelId: "OpenAI.Codex_2p2nqsd0c76g0!App",
+    packageVersion: "26.831.2377.0",
+    appVersion: "26.831.21537",
+    executableVersion: "152.0.7977.64",
+    asarSha256: "37E442E444194CEBFF47EB190B2C0CCD99332498A361545BBF823C49CCF11CD3"
+  };
+  assert.equal(
+    matchCompatibility(currentInstallation, reviewedCompatibility)?.selectorContract,
+    "data-model-picker-view-v2"
+  );
+  assert.equal(
+    matchCompatibility(
+      {
+        ...currentInstallation,
+        asarSha256: "37E442E444194CEBFF47EB190B2C0CCD99332498A361545BBF823C49CCF11CD2"
+      },
+      reviewedCompatibility
+    ),
+    null
+  );
+});
 
 test("只有完整版本与哈希匹配时允许注入", () => {
   assert.equal(matchCompatibility(installation, compatibility)?.selectorContract, "test");
