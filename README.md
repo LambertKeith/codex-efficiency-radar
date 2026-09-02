@@ -44,7 +44,8 @@ cd codex-efficiency-radar
 并在受支持平台上安装选择器运行时。macOS 选择器运行时位于
 `~/Library/Application Support/CodexEfficiencyRadar`，登录启动项位于
 `~/Library/LaunchAgents/com.lambertkeith.codex-efficiency-radar.plist`。
-Windows 运行时仍位于 `%LOCALAPPDATA%\CodexEfficiencyRadar`。
+Windows 运行时位于 `%USERPROFILE%\.codex\runtimes\codex-efficiency-radar`，
+并通过当前用户计划任务 `CodexEfficiencyResident` 在登录时启动。
 
 安装不会中断或强制关闭安装时正在运行的 Codex。安装器若检测到主进程仍存活，
 会明确提示完整退出；Resident 会在确认主进程结束后启动增强模式。然后打开

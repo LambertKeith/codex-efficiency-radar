@@ -22,6 +22,11 @@ intercepting normal Codex launches, requests a standard launch without debugging
 arguments when no Codex process is alive, and exits. Re-running the installer is
 required to clear the breaker after the failure has been investigated.
 
+The Windows runtime is stored below the current user's `.codex` directory rather
+than `%LOCALAPPDATA%`, whose contents may be virtualized for packaged Codex
+processes. A current-user, limited-run-level scheduled task starts the resident at
+sign-in so the process and runtime remain visible outside the Codex process tree.
+
 The overlay refuses to run unless the platform, architecture, package or bundle
 version, app version, executable version, and `app.asar` SHA-256 all match a
 reviewed entry in
@@ -33,4 +38,5 @@ On macOS the check also requires the official `com.openai.codex` bundle identifi
 and OpenAI Team ID. Only install the overlay on a trusted local account. Other local
 processes running as the same user may be able to access the loopback debugging
 endpoint while Codex is open. Use `Uninstall.cmd` on Windows or `./Uninstall.sh`
-on macOS to stop the background process and remove the current-user startup entry.
+on macOS to stop the background process and remove the current-user scheduled task
+or startup entry.

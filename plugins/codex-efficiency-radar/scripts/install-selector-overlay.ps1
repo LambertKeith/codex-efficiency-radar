@@ -5,7 +5,9 @@ $ErrorActionPreference = 'Stop'
 $taskName = 'CodexEfficiencyResident'
 $pluginRoot = Split-Path -Parent $PSScriptRoot
 $sourceOverlayRoot = Join-Path $pluginRoot 'windows-overlay'
-$runtimeRoot = Join-Path $env:LOCALAPPDATA 'CodexEfficiencyRadar'
+$userProfileDir = [Environment]::GetFolderPath('UserProfile')
+$runtimeRoot = Join-Path $userProfileDir '.codex\runtimes\codex-efficiency-radar'
+$legacyRuntimeRoot = Join-Path $env:LOCALAPPDATA 'CodexEfficiencyRadar'
 $overlayRoot = Join-Path $runtimeRoot 'windows-overlay'
 $runnerPath = Join-Path $overlayRoot 'Run-Resident.ps1'
 $sourceLauncherPath = Join-Path $sourceOverlayRoot 'src\launcher.mjs'
@@ -36,10 +38,15 @@ if ($null -ne $existingTask) {
 }
 
 $overlayPattern = [regex]::Escape($overlayRoot) + '.*\\src\\(resident|launcher)\.mjs'
+$legacyRuntimePattern = [regex]::Escape($legacyRuntimeRoot) + '.*\\src\\(resident|launcher)\.mjs'
 $legacyPattern = 'codex-efficiency-selector-patch\\src\\(resident|launcher)\.mjs'
 $managedProcesses = Get-CimInstance Win32_Process | Where-Object {
   $_.Name -eq 'node.exe' -and
-  ($_.CommandLine -match $overlayPattern -or $_.CommandLine -match $legacyPattern)
+  (
+    $_.CommandLine -match $overlayPattern -or
+    $_.CommandLine -match $legacyRuntimePattern -or
+    $_.CommandLine -match $legacyPattern
+  )
 }
 foreach ($process in $managedProcesses) {
   Stop-Process -Id $process.ProcessId -ErrorAction SilentlyContinue
@@ -65,30 +72,41 @@ $currentCodex = Get-CimInstance Win32_Process -Filter "Name='ChatGPT.exe'" | Whe
 if ($null -ne $currentCodex) {
   Set-Content -LiteralPath $ignorePath -Value $currentCodex.ProcessId -Encoding ASCII
   Write-Warning (
-    'Codex main process PID {0} is still running. Close Codex completely; ' +
-    'closing only the window may leave the process alive. The installer will not stop it.' -f
-    $currentCodex.ProcessId
+    ('Codex main process PID {0} is still running. Close Codex completely; ' +
+    'closing only the window may leave the process alive. The installer will not stop it.') -f
+      $currentCodex.ProcessId
   )
 } elseif (Test-Path -LiteralPath $ignorePath) {
   Remove-Item -LiteralPath $ignorePath -Force
 }
 
 $quotedRunnerPath = $runnerPath.Replace("'", "''")
-$runnerCommand = "& '$quotedRunnerPath'"
+$quotedNodePath = $nodePath.Replace("'", "''")
+$runnerCommand = "& '$quotedRunnerPath' -NodePath '$quotedNodePath'"
 $encodedRunnerCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($runnerCommand))
 $launchArguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -EncodedCommand {0}' -f $encodedRunnerCommand
-$startupCommand = ('{0} {1}' -f $powerShellPath, $launchArguments).Replace('"', '""')
-$startupScript = @"
-Set shell = CreateObject("WScript.Shell")
-shell.Run "$startupCommand", 0, False
-"@
+$userId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$taskAction = New-ScheduledTaskAction -Execute $powerShellPath -Argument $launchArguments
+$taskTrigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
+$taskPrincipal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
+$taskSettings = New-ScheduledTaskSettingsSet `
+  -MultipleInstances IgnoreNew `
+  -ExecutionTimeLimit ([TimeSpan]::Zero) `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries
+$taskDefinition = New-ScheduledTask `
+  -Action $taskAction `
+  -Trigger $taskTrigger `
+  -Principal $taskPrincipal `
+  -Settings $taskSettings `
+  -Description 'Runs the Codex Efficiency Radar selector resident for the current user.'
+Register-ScheduledTask -TaskName $taskName -InputObject $taskDefinition -Force | Out-Null
+Start-ScheduledTask -TaskName $taskName
 
-New-Item -ItemType Directory -Path $startupDir -Force | Out-Null
-Set-Content -LiteralPath $startupPath -Value $startupScript -Encoding Unicode
-Start-Process -FilePath $powerShellPath -ArgumentList $launchArguments -WindowStyle Hidden
-
-if (Test-Path -LiteralPath $legacyStartup) {
-  Remove-Item -LiteralPath $legacyStartup -Force
+foreach ($startupFile in @($startupPath, $legacyStartup)) {
+  if (Test-Path -LiteralPath $startupFile) {
+    Remove-Item -LiteralPath $startupFile -Force
+  }
 }
 
 for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
@@ -101,11 +119,20 @@ for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
   }
 }
 if ($null -eq $resident) {
-  if (Test-Path -LiteralPath $startupPath) {
-    Remove-Item -LiteralPath $startupPath -Force
-  }
+  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+  Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
   throw 'The selector resident process did not start.'
 }
 
-Write-Host 'Windows selector overlay installed. It starts automatically with Windows.'
+if (Test-Path -LiteralPath $legacyRuntimeRoot) {
+  $resolvedLegacyRoot = [System.IO.Path]::GetFullPath($legacyRuntimeRoot).TrimEnd('\')
+  $expectedLegacyRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path $env:LOCALAPPDATA 'CodexEfficiencyRadar')
+  ).TrimEnd('\')
+  if ($resolvedLegacyRoot -eq $expectedLegacyRoot) {
+    Remove-Item -LiteralPath $resolvedLegacyRoot -Recurse -Force
+  }
+}
+
+Write-Host 'Windows selector overlay installed. Its current-user scheduled task starts automatically at sign-in.'
 Write-Host 'If Codex was running, exit it completely. Enhanced mode starts after the main process exits.'
