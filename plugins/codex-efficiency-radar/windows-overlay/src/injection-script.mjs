@@ -3,7 +3,7 @@ import { buildSelectorBridgeSource } from "./selector-bridge.mjs";
 
 function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract) {
   const ROOT_KEY = "__codexEfficiencyRadarOverlay";
-  const OVERLAY_VERSION = 8;
+  const OVERLAY_VERSION = 10;
   const STYLE_ID = "codex-efficiency-radar-style";
   const ROOT_ATTR = "data-codex-efficiency-root";
   const ENTRY_ATTR = "data-codex-efficiency-entry";
@@ -27,10 +27,6 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
   const safeScore = (value) => {
     const score = Number(value);
     return Number.isFinite(score) && score >= 0 && score <= 150 ? Math.round(score) : null;
-  };
-  const safeCount = (value) => {
-    const count = Number(value);
-    return Number.isFinite(count) && count >= 0 ? Math.round(count) : null;
   };
   const effortRank = (id, fallback = effortOrder.length) => {
     const index = effortOrder.indexOf(id);
@@ -135,15 +131,11 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     const candidate = scored.find((effort) => effort.average >= peak * 0.95);
     return candidate && candidate.rank < highestRank ? candidate.id : null;
   };
-  const metricNode = (kind, label, value) => {
-    const metric = document.createElement("span");
-    metric.className = `codex-efficiency-score codex-efficiency-score-${kind}`;
-    const metricLabel = document.createElement("span");
-    metricLabel.textContent = label;
+  const metricNode = (kind, value) => {
     const score = document.createElement("strong");
+    score.className = `codex-efficiency-score codex-efficiency-score-${kind}`;
     score.textContent = String(value);
-    metric.append(metricLabel, score);
-    return metric;
+    return score;
   };
   const createOption = (state, model, modelLabel, column, effort, isValuePick) => {
     const comprehensive = safeScore(effort?.comprehensiveIq);
@@ -166,10 +158,14 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     badges.className = "codex-efficiency-option-badges";
     const valueBadge = document.createElement("span");
     valueBadge.className = "codex-efficiency-badge codex-efficiency-badge-value";
-    valueBadge.textContent = "优选";
+    valueBadge.setAttribute("aria-hidden", "true");
+    valueBadge.title = "优选";
+    valueBadge.textContent = "★";
     const currentBadge = document.createElement("span");
     currentBadge.className = "codex-efficiency-badge codex-efficiency-badge-current";
-    currentBadge.textContent = "当前";
+    currentBadge.setAttribute("aria-hidden", "true");
+    currentBadge.title = "当前";
+    currentBadge.textContent = "✓";
     badges.append(valueBadge, currentBadge);
 
     const optionHead = document.createElement("span");
@@ -177,33 +173,29 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     const effortLabel = document.createElement("span");
     effortLabel.className = "codex-efficiency-option-effort";
     effortLabel.textContent = column.label;
-    const effortCode = document.createElement("small");
-    effortCode.textContent = column.id.toUpperCase();
-    effortLabel.append(effortCode);
     optionHead.append(effortLabel, badges);
 
     const pair = document.createElement("span");
     pair.className = "codex-efficiency-score-pair";
-    if (comprehensive != null) pair.append(metricNode("comprehensive", "综合", comprehensive));
-    if (software != null) pair.append(metricNode("software", "工程", software));
+    pair.setAttribute("aria-hidden", "true");
+    if (comprehensive != null) pair.append(metricNode("comprehensive", comprehensive));
+    if (comprehensive != null && software != null) {
+      const separator = document.createElement("span");
+      separator.className = "codex-efficiency-score-separator";
+      separator.textContent = "/";
+      pair.append(separator);
+    }
+    if (software != null) pair.append(metricNode("software", software));
     option.append(optionHead, pair);
 
-    const details = [];
-    const softwareSamples = safeCount(effort?.softwareSamples);
-    const visualSamples = safeCount(effort?.visualSamples);
-    const runs24h = safeCount(effort?.runs24h);
-    if (softwareSamples != null) details.push(`软件样本 ${softwareSamples}`);
-    if (visualSamples != null) details.push(`视觉样本 ${visualSamples}`);
-    if (runs24h != null) details.push(`24 小时运行 ${runs24h}`);
-    if (isValuePick) details.push("优选：达到该模型峰值 95% 的最低档位");
-    if (details.length) option.title = details.join("，");
+    option.title = `${modelLabel} · ${column.label} · 综合 ${comprehensive ?? "—"} / 工程 ${software ?? "—"}${isValuePick ? " · 优选" : ""}`;
     option.setAttribute(
       "aria-label",
-      `${modelLabel}，${column.label}，综合智能 ${comprehensive ?? "无"}，软件工程 ${software ?? "无"}，点击选择`
+      `${modelLabel}，${column.label}，综合智能 ${comprehensive ?? "无"}，软件工程 ${software ?? "无"}${isValuePick ? "，优选" : ""}，点击选择`
     );
     option.addEventListener("pointerdown", (event) => event.stopPropagation());
     option.addEventListener("click", (event) =>
-      state.requestSelection(event, option, model.id, column.id, `${modelLabel} · ${column.label}`)
+      state.requestSelection(event, option, model.id, column.id)
     );
     cell.append(option);
     return cell;
@@ -226,11 +218,10 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
       modelName.className = "codex-efficiency-model-label";
       modelName.setAttribute("role", "rowheader");
       const modelLabel = model.label || model.shortLabel || model.id || "未知模型";
+      const displayLabel = model.shortLabel || model.label || model.id || "未知模型";
       const label = document.createElement("span");
-      label.textContent = modelLabel;
-      const id = document.createElement("small");
-      id.textContent = model.id || "";
-      modelName.append(label, id);
+      label.textContent = displayLabel;
+      modelName.append(label);
       row.append(modelName);
       const effortList = document.createElement("div");
       effortList.className = "codex-efficiency-effort-list";
@@ -270,7 +261,7 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     }).format(timestamp);
   };
   const statusPresentation = (state) => {
-    if (state.refreshing) return { kind: "loading", text: "正在重新核对第三方数据…" };
+    if (state.refreshing) return { kind: "loading", text: "刷新中…" };
     if (state.refreshError) return { kind: "error", text: state.refreshError };
     if (state.selectionState) return state.selectionState;
     const warnings = Array.isArray(state.snapshot.warnings)
@@ -285,7 +276,7 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     }
     if (source.refreshState === "stale") return { kind: "stale", text: `最近一次成功快照 · ${time}` };
     if (source.refreshState === "cooldown") return { kind: "cooldown", text: `源站共享缓存 · ${time}` };
-    return { kind: "current", text: `第三方社区快照 · ${time}` };
+    return { kind: "current", text: "" };
   };
   const snapshotSignature = (snapshot) => {
     const source = JSON.stringify({ models: snapshot.models, source: snapshot.source, warnings: snapshot.warnings });
@@ -299,24 +290,11 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
   const panelHeading = () => {
     const heading = document.createElement("div");
     heading.className = "codex-efficiency-panel-heading";
-    const titleGroup = document.createElement("span");
-    titleGroup.className = "codex-efficiency-panel-title";
-    const title = document.createElement("strong");
-    title.textContent = "效率能力地图";
-    const hint = document.createElement("span");
-    hint.textContent = "点击任意组合即可切换模型与推理档位";
-    titleGroup.append(title, hint);
     const metrics = document.createElement("span");
     metrics.className = "codex-efficiency-panel-metrics";
-    metrics.textContent = "综合智能 / 软件工程";
-    heading.append(titleGroup, metrics);
+    metrics.textContent = "综合 / 工程";
+    heading.append(metrics);
     return heading;
-  };
-  const mapLegend = () => {
-    const legend = document.createElement("div");
-    legend.className = "codex-efficiency-map-legend";
-    legend.textContent = "优选：以推理档位为成本代理，达到该模型峰值双指标均值 95% 的最低档";
-    return legend;
   };
   const panelFooter = (state) => {
     const footer = document.createElement("div");
@@ -326,7 +304,7 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     const refresh = document.createElement("button");
     refresh.type = "button";
     refresh.setAttribute(REFRESH_ATTR, "true");
-    refresh.textContent = "刷新效率值";
+    refresh.textContent = "刷新";
     refresh.addEventListener("click", (event) => state.requestRefresh(event));
     footer.append(status, refresh);
     return footer;
@@ -345,10 +323,9 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
       if (open) surface.setAttribute(SURFACE_EXPANDED_ATTR, "true");
       else surface.removeAttribute(SURFACE_EXPANDED_ATTR);
     }
-    setText(root.querySelector(".codex-efficiency-entry-summary"), `${state.snapshot.models.length} 个模型`);
     refresh.toggleAttribute("disabled", state.refreshing);
     refresh.dataset.loading = String(state.refreshing);
-    setText(refresh, state.refreshing ? "正在刷新…" : "刷新效率值");
+    setText(refresh, state.refreshing ? "刷新中…" : "刷新");
     const selected = readSelection(root);
     for (const option of root.querySelectorAll(`[${OPTION_ATTR}]`)) {
       const active = selected.model?.id === option.dataset.modelId && selected.effort === option.dataset.effortId;
@@ -368,7 +345,7 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     if (!panel) return;
     if (force || root.dataset.signature !== signature) {
       const hidden = panel.hidden;
-      panel.replaceChildren(panelHeading(), createGrid(state, state.snapshot), mapLegend(), panelFooter(state));
+      panel.replaceChildren(panelHeading(), createGrid(state, state.snapshot), panelFooter(state));
       panel.hidden = hidden;
       root.dataset.signature = signature;
     }
@@ -393,14 +370,12 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     icon.textContent = "◇";
     const label = document.createElement("span");
     label.className = "codex-efficiency-entry-label";
-    label.textContent = "查看效率地图";
-    const summary = document.createElement("span");
-    summary.className = "codex-efficiency-entry-summary";
+    label.textContent = "效率";
     const chevron = document.createElement("span");
     chevron.className = "codex-efficiency-entry-chevron";
     chevron.setAttribute("aria-hidden", "true");
     chevron.textContent = "⌄";
-    entry.append(icon, label, summary, chevron);
+    entry.append(icon, label, chevron);
     const panel = document.createElement("section");
     panel.id = panelId;
     panel.hidden = true;
@@ -433,9 +408,9 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
   const state = window[ROOT_KEY] ?? {
     version: OVERLAY_VERSION,
     selectorContract: nextSelectorContract,
-        snapshot: nextSnapshot,
-        scheduled: false,
-        forceRender: false,
+    snapshot: nextSnapshot,
+    scheduled: false,
+    forceRender: false,
     observer: null,
     openEntry: null,
     refreshing: false,
@@ -451,17 +426,17 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
       if (this.openEntry && !this.openEntry.isConnected) this.openEntry = null;
       for (const host of findSurfaceHosts(this.snapshot)) createEntry(this, host);
       for (const root of document.querySelectorAll(`[${ROOT_ATTR}]`)) renderEntry(this, root, force);
-        },
-        schedule(force = false) {
-          this.forceRender ||= force;
-          if (this.scheduled) return;
-          this.scheduled = true;
-          queueMicrotask(() => {
-            this.scheduled = false;
-            const shouldForce = this.forceRender;
-            this.forceRender = false;
-            this.render(shouldForce);
-          });
+    },
+    schedule(force = false) {
+      this.forceRender ||= force;
+      if (this.scheduled) return;
+      this.scheduled = true;
+      queueMicrotask(() => {
+        this.scheduled = false;
+        const shouldForce = this.forceRender;
+        this.forceRender = false;
+        this.render(shouldForce);
+      });
     },
     toggleEntry(root) {
       const panel = root.querySelector(`[${PANEL_ATTR}]`);
@@ -479,16 +454,16 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     updateAllControls() {
       for (const root of document.querySelectorAll(`[${ROOT_ATTR}]`)) updateEntryControls(this, root);
     },
-    async requestSelection(event, option, modelId, effortId, label) {
+    async requestSelection(event, option, modelId, effortId) {
       event?.preventDefault?.();
       event?.stopPropagation?.();
       if (this.selecting || !modelId || !effortId) return;
       this.selecting = { modelId, effortId };
-      this.selectionState = { kind: "selecting", text: `正在切换到 ${label}…` };
+      this.selectionState = { kind: "selecting", text: "切换中…" };
       this.updateAllControls();
       try {
         await selector.select(option, modelId, effortId);
-        this.selectionState = { kind: "current", text: `已切换到 ${label}` };
+        this.selectionState = null;
       } catch (error) {
         this.selectionState = { kind: "error", text: `切换失败：${error?.message || "未知错误"}` };
       } finally {
@@ -542,21 +517,21 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     }
   };
 
-      if (!window[ROOT_KEY]) {
-        window[ROOT_KEY] = state;
-        state.observer = new MutationObserver((mutations) => {
-          const relevant = mutations.some((mutation) =>
-            !mutation.target?.closest?.(`[${ROOT_ATTR}]`)
-          );
-          if (relevant) state.schedule();
-        });
-        state.observer.observe(document.documentElement, {
-          attributes: true,
-          attributeFilter: ["aria-hidden", "data-state", "hidden"],
-          childList: true,
-          subtree: true
-        });
-      }
+  if (!window[ROOT_KEY]) {
+    window[ROOT_KEY] = state;
+    state.observer = new MutationObserver((mutations) => {
+      const relevant = mutations.some((mutation) =>
+        !mutation.target?.closest?.(`[${ROOT_ATTR}]`)
+      );
+      if (relevant) state.schedule();
+    });
+    state.observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["aria-hidden", "data-state", "hidden"],
+      childList: true,
+      subtree: true
+    });
+  }
   state.updateSnapshot(nextSnapshot, nextSelectorContract);
 }
 

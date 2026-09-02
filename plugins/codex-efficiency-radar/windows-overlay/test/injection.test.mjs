@@ -21,7 +21,7 @@ const snapshot = {
 test("生成的注入脚本语法有效并包含能力地图与原生选择契约", () => {
   const source = buildInjectionSource(snapshot, "data-model-picker-view-v2");
   assert.doesNotThrow(() => new Function(source));
-  assert.match(source, /OVERLAY_VERSION = 8/);
+  assert.match(source, /OVERLAY_VERSION = 10/);
   assert.match(source, /BRIDGE_VERSION = 1/);
   assert.match(source, /data-model-picker-view-v2/);
   assert.match(source, /role=\"menu\"/);
@@ -32,19 +32,21 @@ test("生成的注入脚本语法有效并包含能力地图与原生选择契�
   assert.match(source, /data-codex-efficiency-grid/);
   assert.match(source, /data-codex-efficiency-option/);
   assert.match(source, /data-codex-efficiency-refresh/);
-  assert.match(source, /查看效率地图/);
-  assert.match(source, /刷新效率值/);
+  assert.match(source, /label\.textContent = "效率"/);
+  assert.match(source, /refresh\.textContent = "刷新"/);
   assert.match(source, /效率能力地图/);
-  assert.match(source, /点击任意组合即可切换/);
-  assert.match(source, /达到该模型峰值 95% 的最低档位/);
-  assert.match(source, /综合智能 \/ 软件工程/);
-  assert.match(source, /font-size: 16px/);
+  assert.doesNotMatch(source, /点击任意组合即可切换/);
+  assert.doesNotMatch(source, /达到该模型峰值 95% 的最低档位/);
+  assert.match(source, /metrics\.textContent = "综合 \/ 工程"/);
+  assert.match(source, /font-size: 14px/);
   assert.match(source, /codex-efficiency-effort-list/);
   assert.match(source, /overflow-x: hidden/);
   assert.doesNotMatch(source, /codex-efficiency-map-head/);
   assert.match(source, /queueMicrotask/);
   assert.match(source, /attributeFilter: \["aria-hidden", "data-state", "hidden"\]/);
-  assert.match(source, /width: min\(760px, calc\(100vw - 32px\)\)/);
+  assert.match(source, /width: min\(580px, calc\(100vw - 32px\)\)/);
+  assert.match(source, /max-height: min\(286px, 34vh\)/);
+  assert.doesNotMatch(source, /codex-efficiency-map-legend/);
   assert.match(source, /data-reasoning-slider/);
   assert.match(source, /data-model-picker-model-row/);
 });

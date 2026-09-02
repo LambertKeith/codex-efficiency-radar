@@ -88,7 +88,8 @@ function assertEntryAtBottom(host) {
   const root = host.lastElementChild;
   assert.equal(root?.getAttribute("data-codex-efficiency-root"), "true");
   const entry = root.querySelector("[data-codex-efficiency-entry]");
-  assert.match(entry?.textContent ?? "", /查看效率地图/);
+  assert.equal(entry?.querySelector(".codex-efficiency-entry-label")?.textContent, "效率");
+  assert.equal(entry?.querySelector(".codex-efficiency-entry-summary"), null);
   assert.equal(entry?.getAttribute("aria-expanded"), "false");
   assert.equal(root.querySelector("[data-codex-efficiency-panel]")?.hidden, true);
 }
@@ -222,7 +223,7 @@ test("内部 ViewPanel 替换不会移动入口或产生重复节点", async () 
   window.__codexEfficiencyRadarOverlay.observer.disconnect();
 });
 
-test("入口展开为模型卡片能力地图并按相对规则标出优选", async () => {
+test("入口展开为无表格线的紧凑能力面板并保留优选状态", async () => {
   const { window, document } = createDom(`
     <div role="menu" id="picker-menu"><div data-model-picker-view="simple"></div></div>
   `);
@@ -235,8 +236,7 @@ test("入口展开为模型卡片能力地图并按相对规则标出优选", as
   assert.equal(entry.getAttribute("aria-expanded"), "true");
   assert.equal(panel.hidden, false);
   assert.equal(document.querySelector("#picker-menu").getAttribute("data-codex-efficiency-expanded"), "true");
-  assert.match(panel.querySelector(".codex-efficiency-panel-heading").textContent, /效率能力地图/);
-  assert.match(panel.querySelector(".codex-efficiency-panel-heading").textContent, /点击任意组合即可切换/);
+  assert.equal(panel.querySelector(".codex-efficiency-panel-heading").textContent, "综合 / 工程");
 
   const grid = panel.querySelector("[data-codex-efficiency-grid]");
   assert.equal(grid.getAttribute("role"), "grid");
@@ -246,13 +246,21 @@ test("入口展开为模型卡片能力地图并按相对规则标出优选", as
   const solHigh = grid.querySelector('[data-model-id="gpt-5.6-sol"][data-effort-id="high"]');
   const solXHigh = grid.querySelector('[data-model-id="gpt-5.6-sol"][data-effort-id="xhigh"]');
   const terraLow = grid.querySelector('[data-model-id="gpt-5.6-terra"][data-effort-id="low"]');
-  assert.match(solHigh.textContent, /优选.*综合98.*工程97/);
+  assert.equal(solHigh.querySelector(".codex-efficiency-option-effort").textContent, "高");
+  assert.equal(solHigh.querySelector(".codex-efficiency-score-pair").textContent, "98/97");
+  assert.equal(solHigh.querySelector(".codex-efficiency-badge-value").textContent, "★");
+  assert.equal(solHigh.querySelector(".codex-efficiency-badge-current").textContent, "✓");
+  assert.match(solHigh.getAttribute("aria-label"), /优选/);
+  assert.match(solHigh.title, /综合 98 \/ 工程 97 · 优选/);
   assert.equal(solHigh.dataset.valuePick, "true");
   assert.equal(solXHigh.dataset.valuePick, "false");
   assert.equal(terraLow.dataset.valuePick, "false");
-  assert.match(solHigh.querySelector(".codex-efficiency-option-head").textContent, /高HIGH/);
+  assert.equal(grid.querySelector('[data-model-id="gpt-5.6-sol"] .codex-efficiency-model-label').textContent, "5.6 Sol");
   assert.equal(grid.querySelector(".codex-efficiency-empty"), null);
-  assert.match(panel.querySelector(".codex-efficiency-map-legend").textContent, /推理档位为成本代理.*95%/);
+  assert.equal(panel.querySelector(".codex-efficiency-map-legend"), null);
+  assert.doesNotMatch(panel.textContent, /点击任意组合|95%|gpt-5\.6-sol|HIGH|软件样本/);
+  assert.equal(panel.querySelector("[data-codex-efficiency-status]").textContent, "");
+  assert.equal(panel.querySelector("[data-codex-efficiency-refresh]").textContent, "刷新");
   assert.equal(panel.querySelector("table"), null);
 
   entry.click();
@@ -316,7 +324,7 @@ test("点击新版能力项通过原生模型行和 Power 控件切换组合", a
   assert.equal(status.textContent, "5.6 Terra High, 2 of 2.");
   assert.equal(target.dataset.selected, "true");
   assert.equal(target.getAttribute("aria-pressed"), "true");
-  assert.match(document.querySelector("[data-codex-efficiency-status]").textContent, /已切换到 GPT-5.6 Terra · 高/);
+  assert.equal(document.querySelector("[data-codex-efficiency-status]").textContent, "");
 });
 
 test("从新版 advanced 界面点击同模型档位会先返回原生 Power 界面", async () => {
@@ -477,7 +485,11 @@ test("旧版推理档位位于子菜单时先打开原生入口再选择", async
 
   assert.equal(trigger.dataset.selectedReasoningEffort, "xhigh");
   assert.match(trigger.textContent, /5\.6 Sol 极高/);
-  assert.match(root.querySelector("[data-codex-efficiency-status]").textContent, /已切换/);
+  assert.equal(root.querySelector("[data-codex-efficiency-status]").textContent, "");
+  assert.equal(
+    root.querySelector('[data-model-id="gpt-5.6-sol"][data-effort-id="xhigh"]').getAttribute("aria-pressed"),
+    "true"
+  );
 });
 
 test("面板底部刷新可桥接，快照更新解除 loading 且不重复注入", async () => {
@@ -507,7 +519,8 @@ test("面板底部刷新可桥接，快照更新解除 loading 且不重复注�
   const updated = document.querySelector(
     '[data-codex-efficiency-option][data-model-id="gpt-5.6-sol"][data-effort-id="high"]'
   );
-  assert.match(updated.textContent, /综合109.*工程108/);
+  assert.equal(updated.querySelector(".codex-efficiency-score-pair").textContent, "109/108");
+  assert.match(updated.getAttribute("aria-label"), /综合智能 109，软件工程 108/);
 
   install(window, document, updatedSnapshot);
   await settle();
