@@ -10,23 +10,28 @@ const snapshot = {
       label: "GPT-5.6 Sol",
       shortLabel: "5.6 Sol",
       efforts: [
-        { id: "high", comprehensiveIq: 98, softwareIq: 97 },
-        { id: "xhigh", comprehensiveIq: 104, softwareIq: 101 }
+        { id: "high", label: "高", comprehensiveIq: 98, softwareIq: 97 },
+        { id: "xhigh", label: "极高", comprehensiveIq: 104, softwareIq: 101 }
       ]
     }
   ],
   source: { checkedAt: "2026-08-31T00:00:00.000Z" }
 };
 
-test("生成的注入脚本语法有效并包含关键契约", () => {
+test("生成的注入脚本语法有效并包含新旧选择器的矩阵契约", () => {
   const source = buildInjectionSource(snapshot);
   assert.doesNotThrow(() => new Function(source));
-  assert.match(source, /data-codex-intelligence-trigger/);
+  assert.match(source, /role=\"menu\"/);
+  assert.match(source, /data-model-picker-view/);
+  assert.match(source, /data-codex-efficiency-root/);
+  assert.match(source, /data-codex-efficiency-entry/);
+  assert.match(source, /data-codex-efficiency-panel/);
+  assert.match(source, /data-codex-efficiency-table/);
+  assert.match(source, /data-codex-efficiency-refresh/);
+  assert.match(source, /查看效率值/);
   assert.match(source, /刷新效率值/);
   assert.match(source, /综合智能/);
-  assert.match(source, /软件工程能力/);
-  assert.match(source, /data-codex-efficiency-row/);
-  assert.match(source, /flex-direction: row !important/);
+  assert.match(source, /软件工程/);
 });
 
 test("注入脚本转义 HTML 起始字符", () => {

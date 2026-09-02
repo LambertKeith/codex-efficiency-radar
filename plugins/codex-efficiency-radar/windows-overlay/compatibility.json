@@ -11,6 +11,15 @@
       "selectorContract": "data-codex-intelligence-trigger-v1"
     },
     {
+      "platform": "win32",
+      "appUserModelId": "OpenAI.Codex_2p2nqsd0c76g0!App",
+      "packageVersion": "26.831.1445.0",
+      "appVersion": "26.831.20005",
+      "executableVersion": "152.0.7977.64",
+      "asarSha256": "2250F6ABFF89D19A1298EE5D488FCA438CFEAE0F3E161867FF45F53C8B04E97E",
+      "selectorContract": "data-model-picker-view-v2"
+    },
+    {
       "platform": "darwin",
       "arch": "arm64",
       "packageVersion": "7377",
