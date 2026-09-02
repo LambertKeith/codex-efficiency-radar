@@ -35934,7 +35934,7 @@ async function toolResult(client, { force = false, model } = {}) {
 }
 function createRadarServer({ client = new RadarClient() } = {}) {
   const server2 = new McpServer(
-    { name: "codex-efficiency-radar", version: "0.4.0" },
+    { name: "codex-efficiency-radar", version: "0.4.1" },
     { capabilities: { tools: {}, resources: {} } }
   );
   server2.registerResource("efficiency-radar-widget", WIDGET_URI, {}, async () => ({

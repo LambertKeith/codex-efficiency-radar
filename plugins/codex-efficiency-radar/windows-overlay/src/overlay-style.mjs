@@ -6,6 +6,7 @@ export const OVERLAY_CSS = String.raw`
     --cer-surface-raised: color-mix(in srgb, Canvas 88%, currentColor 12%);
     --cer-hover: color-mix(in srgb, currentColor 7%, transparent);
     --cer-value: color-mix(in srgb, #d8a63c 76%, currentColor 24%);
+    --cer-selected: color-mix(in srgb, #3b82f6 70%, currentColor 30%);
     border-block-start: 1px solid var(--cer-border);
     box-sizing: border-box;
     color: inherit;
@@ -105,68 +106,51 @@ export const OVERLAY_CSS = String.raw`
     opacity: .68;
   }
   .codex-efficiency-map-scroll {
-    max-height: min(390px, 46vh);
-    overflow: auto;
+    max-height: min(430px, 48vh);
+    overflow-x: hidden;
+    overflow-y: auto;
     overscroll-behavior: contain;
     padding: 4px 8px 8px;
     scrollbar-color: color-mix(in srgb, currentColor 32%, transparent) transparent;
   }
   [data-codex-efficiency-grid] {
-    min-width: var(--cer-map-width, 680px);
-  }
-  .codex-efficiency-map-head,
-  .codex-efficiency-map-row {
     display: grid;
-    gap: 6px;
-    grid-template-columns: var(--cer-map-columns);
-  }
-  .codex-efficiency-map-head {
-    background: var(--cer-surface);
-    inset-block-start: -4px;
-    padding: 7px 6px 6px;
-    position: sticky;
-    z-index: 4;
-  }
-  .codex-efficiency-model-head,
-  .codex-efficiency-effort-head {
-    align-self: end;
-    font-size: 10px;
-    font-weight: 700;
-    opacity: .68;
-    padding: 0 7px;
-  }
-  .codex-efficiency-effort-head small {
-    display: block;
-    font-size: 8px;
-    font-weight: 600;
-    letter-spacing: .05em;
-    margin-block-start: 1px;
-    opacity: .62;
+    gap: 8px;
   }
   .codex-efficiency-map-row {
-    background: color-mix(in srgb, currentColor 3%, transparent);
+    background: color-mix(in srgb, currentColor 2.5%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 9%, transparent);
     border-radius: 11px;
-    margin-block-end: 6px;
-    padding: 6px;
-    transition: background 120ms ease;
+    padding: 10px;
+    transition: background 120ms ease, border-color 120ms ease;
   }
   .codex-efficiency-map-row:hover {
     background: color-mix(in srgb, currentColor 5%, transparent);
+    border-color: var(--cer-border);
   }
   .codex-efficiency-model-label {
-    align-content: center;
-    display: grid;
+    align-items: baseline;
+    display: flex;
     font-size: 12px;
     font-weight: 750;
+    gap: 7px;
     line-height: 1.25;
-    min-height: 68px;
-    padding: 7px;
+    padding: 0 2px 8px;
   }
   .codex-efficiency-model-label small {
     font-size: 9px;
     font-weight: 550;
-    margin-block-start: 3px;
     opacity: .54;
+  }
+  .codex-efficiency-effort-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .codex-efficiency-option-cell {
+    flex: 1 1 104px;
+    max-width: 132px;
+    min-width: 100px;
   }
   [data-codex-efficiency-option] {
     appearance: none;
@@ -177,8 +161,8 @@ export const OVERLAY_CSS = String.raw`
     cursor: pointer;
     display: grid;
     font: inherit;
-    gap: 5px;
-    min-height: 68px;
+    gap: 6px;
+    min-height: 64px;
     padding: 7px 8px;
     position: relative;
     text-align: start;
@@ -198,17 +182,39 @@ export const OVERLAY_CSS = String.raw`
     border-color: color-mix(in srgb, var(--cer-value) 56%, transparent);
   }
   [data-codex-efficiency-option][data-selected="true"] {
-    box-shadow: inset 0 0 0 1px currentColor;
+    border-color: var(--cer-selected);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cer-selected) 38%, transparent);
   }
   [data-codex-efficiency-option]:disabled {
     cursor: wait;
     opacity: .62;
     transform: none;
   }
+  .codex-efficiency-option-head {
+    align-items: flex-start;
+    display: flex;
+    gap: 5px;
+    justify-content: space-between;
+  }
+  .codex-efficiency-option-effort {
+    display: flex;
+    flex-direction: column;
+    font-size: 10px;
+    font-weight: 750;
+    line-height: 1.05;
+  }
+  .codex-efficiency-option-effort small {
+    font-size: 7px;
+    font-weight: 650;
+    letter-spacing: .055em;
+    margin-block-start: 2px;
+    opacity: .46;
+  }
   .codex-efficiency-option-badges {
     display: flex;
     gap: 4px;
-    min-height: 15px;
+    justify-content: flex-end;
+    min-height: 14px;
   }
   .codex-efficiency-badge {
     align-items: center;
@@ -251,14 +257,6 @@ export const OVERLAY_CSS = String.raw`
     letter-spacing: -.02em;
   }
   .codex-efficiency-score-software { opacity: .78; }
-  .codex-efficiency-empty {
-    align-items: center;
-    display: flex;
-    font-size: 13px;
-    justify-content: center;
-    min-height: 68px;
-    opacity: .35;
-  }
   .codex-efficiency-map-legend {
     align-items: center;
     border-block-start: 1px solid var(--cer-border);
@@ -337,5 +335,11 @@ export const OVERLAY_CSS = String.raw`
     .codex-efficiency-entry-chevron,
     .codex-efficiency-map-row,
     [data-codex-efficiency-option] { transition: none; }
+  }
+  @media (max-width: 620px) {
+    .codex-efficiency-option-cell {
+      flex-basis: calc(50% - 3px);
+      max-width: none;
+    }
   }
 `;

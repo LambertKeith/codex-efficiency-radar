@@ -19,7 +19,7 @@ async function toolResult(client, { force = false, model } = {}) {
 
 export function createRadarServer({ client = new RadarClient() } = {}) {
   const server = new McpServer(
-    { name: "codex-efficiency-radar", version: "0.4.0" },
+    { name: "codex-efficiency-radar", version: "0.4.1" },
     { capabilities: { tools: {}, resources: {} } }
   );
 

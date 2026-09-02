@@ -3,7 +3,7 @@ import { buildSelectorBridgeSource } from "./selector-bridge.mjs";
 
 function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract) {
   const ROOT_KEY = "__codexEfficiencyRadarOverlay";
-  const OVERLAY_VERSION = 7;
+  const OVERLAY_VERSION = 8;
   const STYLE_ID = "codex-efficiency-radar-style";
   const ROOT_ATTR = "data-codex-efficiency-root";
   const ENTRY_ATTR = "data-codex-efficiency-entry";
@@ -150,9 +150,8 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     const software = safeScore(effort?.softwareIq);
     const cell = document.createElement("div");
     cell.setAttribute("role", "gridcell");
+    cell.className = "codex-efficiency-option-cell";
     if (comprehensive == null && software == null) {
-      cell.className = "codex-efficiency-empty";
-      cell.textContent = "—";
       return cell;
     }
 
@@ -173,11 +172,21 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     currentBadge.textContent = "当前";
     badges.append(valueBadge, currentBadge);
 
+    const optionHead = document.createElement("span");
+    optionHead.className = "codex-efficiency-option-head";
+    const effortLabel = document.createElement("span");
+    effortLabel.className = "codex-efficiency-option-effort";
+    effortLabel.textContent = column.label;
+    const effortCode = document.createElement("small");
+    effortCode.textContent = column.id.toUpperCase();
+    effortLabel.append(effortCode);
+    optionHead.append(effortLabel, badges);
+
     const pair = document.createElement("span");
     pair.className = "codex-efficiency-score-pair";
     if (comprehensive != null) pair.append(metricNode("comprehensive", "综合", comprehensive));
     if (software != null) pair.append(metricNode("software", "工程", software));
-    option.append(badges, pair);
+    option.append(optionHead, pair);
 
     const details = [];
     const softwareSamples = safeCount(effort?.softwareSamples);
@@ -207,31 +216,6 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     grid.setAttribute("role", "grid");
     grid.setAttribute("aria-label", "Codex 模型与推理强度效率能力地图");
     const columns = effortColumns(snapshot);
-    const template = `minmax(138px, 1.25fr) repeat(${columns.length}, minmax(94px, 1fr))`;
-    grid.style.setProperty("--cer-map-columns", template);
-    grid.style.setProperty("--cer-map-width", `${Math.max(650, 150 + columns.length * 104)}px`);
-
-    const head = document.createElement("div");
-    head.className = "codex-efficiency-map-head";
-    head.setAttribute("role", "row");
-    const modelHeader = document.createElement("span");
-    modelHeader.className = "codex-efficiency-model-head";
-    modelHeader.setAttribute("role", "columnheader");
-    modelHeader.textContent = "模型";
-    head.append(modelHeader);
-    for (const column of columns) {
-      const header = document.createElement("span");
-      header.className = "codex-efficiency-effort-head";
-      header.setAttribute("role", "columnheader");
-      header.dataset.effortId = column.id;
-      const label = document.createElement("span");
-      label.textContent = column.label;
-      const code = document.createElement("small");
-      code.textContent = column.id.toUpperCase();
-      header.append(label, code);
-      head.append(header);
-    }
-    grid.append(head);
 
     for (const model of snapshot.models) {
       const row = document.createElement("div");
@@ -248,6 +232,9 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
       id.textContent = model.id || "";
       modelName.append(label, id);
       row.append(modelName);
+      const effortList = document.createElement("div");
+      effortList.className = "codex-efficiency-effort-list";
+      effortList.setAttribute("role", "presentation");
       const efforts = new Map(
         (Array.isArray(model.efforts) ? model.efforts : [])
           .filter((effort) => effort?.id)
@@ -255,15 +242,18 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
       );
       const pick = valuePick(model);
       for (const column of columns) {
-        row.append(createOption(
+        const effort = efforts.get(column.id);
+        if (safeScore(effort?.comprehensiveIq) == null && safeScore(effort?.softwareIq) == null) continue;
+        effortList.append(createOption(
           state,
           model,
           modelLabel,
           column,
-          efforts.get(column.id),
+          effort,
           pick === column.id
         ));
       }
+      row.append(effortList);
       grid.append(row);
     }
     scroll.append(grid);
@@ -443,8 +433,9 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
   const state = window[ROOT_KEY] ?? {
     version: OVERLAY_VERSION,
     selectorContract: nextSelectorContract,
-    snapshot: nextSnapshot,
-    scheduled: false,
+        snapshot: nextSnapshot,
+        scheduled: false,
+        forceRender: false,
     observer: null,
     openEntry: null,
     refreshing: false,
@@ -460,14 +451,17 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
       if (this.openEntry && !this.openEntry.isConnected) this.openEntry = null;
       for (const host of findSurfaceHosts(this.snapshot)) createEntry(this, host);
       for (const root of document.querySelectorAll(`[${ROOT_ATTR}]`)) renderEntry(this, root, force);
-    },
-    schedule(force = false) {
-      if (this.scheduled) return;
-      this.scheduled = true;
-      requestAnimationFrame(() => {
-        this.scheduled = false;
-        this.render(force);
-      });
+        },
+        schedule(force = false) {
+          this.forceRender ||= force;
+          if (this.scheduled) return;
+          this.scheduled = true;
+          queueMicrotask(() => {
+            this.scheduled = false;
+            const shouldForce = this.forceRender;
+            this.forceRender = false;
+            this.render(shouldForce);
+          });
     },
     toggleEntry(root) {
       const panel = root.querySelector(`[${PANEL_ATTR}]`);
@@ -548,11 +542,21 @@ function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract
     }
   };
 
-  if (!window[ROOT_KEY]) {
-    window[ROOT_KEY] = state;
-    state.observer = new MutationObserver(() => state.schedule());
-    state.observer.observe(document.documentElement, { childList: true, subtree: true });
-  }
+      if (!window[ROOT_KEY]) {
+        window[ROOT_KEY] = state;
+        state.observer = new MutationObserver((mutations) => {
+          const relevant = mutations.some((mutation) =>
+            !mutation.target?.closest?.(`[${ROOT_ATTR}]`)
+          );
+          if (relevant) state.schedule();
+        });
+        state.observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["aria-hidden", "data-state", "hidden"],
+          childList: true,
+          subtree: true
+        });
+      }
   state.updateSnapshot(nextSnapshot, nextSelectorContract);
 }
 

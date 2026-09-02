@@ -158,6 +158,40 @@ test("新版 simple 和 advanced 共用外层菜单底部的单一入口", async
   assert.equal(menu.querySelector("[data-codex-efficiency-entry]").getAttribute("role"), "menuitem");
 });
 
+test("动画帧暂停时仍通过微任务挂载新版入口", async () => {
+  const { window, document } = createDom(`
+    <div role="menu" id="picker-menu"><div data-model-picker-view="simple"></div></div>
+  `);
+  let frameCalls = 0;
+  install(window, document, snapshot, {
+    requestAnimationFrame: () => { frameCalls += 1; }
+  });
+  await settle();
+
+  assert.equal(frameCalls, 0);
+  assertEntryAtBottom(document.querySelector("#picker-menu"));
+});
+
+test("旧版复用弹层仅切换原生状态属性时会补挂入口", async () => {
+  const { window, document } = createDom(`
+    <button data-codex-intelligence-trigger="true" data-state="closed">5.6 Sol</button>
+    <div role="menu" id="picker-menu">
+      <button role="menuitemradio">高</button>
+      <button role="menuitemradio">极高</button>
+    </div>
+  `);
+  install(window, document, snapshot, { MutationObserver: window.MutationObserver });
+  await settle();
+  assert.equal(document.querySelector("[data-codex-efficiency-root]"), null);
+
+  document.querySelector("[data-codex-intelligence-trigger]").dataset.state = "open";
+  await settle();
+  await settle();
+
+  assertEntryAtBottom(document.querySelector("#picker-menu"));
+  window.__codexEfficiencyRadarOverlay.observer.disconnect();
+});
+
 test("内部 ViewPanel 替换不会移动入口或产生重复节点", async () => {
   const { window, document } = createDom(`
     <div role="menu" id="picker-menu">
@@ -188,7 +222,7 @@ test("内部 ViewPanel 替换不会移动入口或产生重复节点", async () 
   window.__codexEfficiencyRadarOverlay.observer.disconnect();
 });
 
-test("入口展开为弱表格化能力地图并按相对规则标出优选", async () => {
+test("入口展开为模型卡片能力地图并按相对规则标出优选", async () => {
   const { window, document } = createDom(`
     <div role="menu" id="picker-menu"><div data-model-picker-view="simple"></div></div>
   `);
@@ -206,9 +240,7 @@ test("入口展开为弱表格化能力地图并按相对规则标出优选", as
 
   const grid = panel.querySelector("[data-codex-efficiency-grid]");
   assert.equal(grid.getAttribute("role"), "grid");
-  const headers = [...grid.querySelectorAll('[role="columnheader"]')];
-  assert.equal(headers[0].textContent.trim(), "模型");
-  assert.deepEqual(headers.slice(1).map((node) => node.firstElementChild.textContent), ["轻度", "高", "极高"]);
+  assert.equal(grid.querySelector('[role="columnheader"]'), null);
   const rows = [...grid.querySelectorAll(".codex-efficiency-map-row")];
   assert.equal(rows.length, 2);
   const solHigh = grid.querySelector('[data-model-id="gpt-5.6-sol"][data-effort-id="high"]');
@@ -218,6 +250,8 @@ test("入口展开为弱表格化能力地图并按相对规则标出优选", as
   assert.equal(solHigh.dataset.valuePick, "true");
   assert.equal(solXHigh.dataset.valuePick, "false");
   assert.equal(terraLow.dataset.valuePick, "false");
+  assert.match(solHigh.querySelector(".codex-efficiency-option-head").textContent, /高HIGH/);
+  assert.equal(grid.querySelector(".codex-efficiency-empty"), null);
   assert.match(panel.querySelector(".codex-efficiency-map-legend").textContent, /推理档位为成本代理.*95%/);
   assert.equal(panel.querySelector("table"), null);
 
