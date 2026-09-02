@@ -7,8 +7,10 @@ The optional Windows/macOS selector overlay is experimental and is not an offici
 OpenAI extension point. It launches the signed Microsoft Store Codex executable
 or the signed and notarized macOS Codex app with a Chrome DevTools Protocol
 endpoint bound to `127.0.0.1`, then injects UI
-markup into `app://` pages at runtime. It does not edit the MSIX package,
-`app.asar`, application signatures, user conversations, or Codex settings.
+markup into `app://` pages at runtime. Clickable efficiency cells reuse the
+reviewed selector's native model rows and reasoning controls to change the active
+composer selection. The overlay does not edit the MSIX package, `app.asar`,
+application signatures, user conversations, settings files, or private config APIs.
 
 On Windows, the overlay activates the packaged app by AppUserModelID through
 `IApplicationActivationManager::ActivateApplication`; it does not directly spawn

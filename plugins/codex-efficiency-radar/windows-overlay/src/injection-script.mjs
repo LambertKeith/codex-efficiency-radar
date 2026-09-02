@@ -1,32 +1,25 @@
-function installEfficiencyOverlay(nextSnapshot) {
+import { OVERLAY_CSS } from "./overlay-style.mjs";
+import { buildSelectorBridgeSource } from "./selector-bridge.mjs";
+
+function installEfficiencyOverlay(nextSnapshot, overlayCss, nextSelectorContract) {
   const ROOT_KEY = "__codexEfficiencyRadarOverlay";
-  const OVERLAY_VERSION = 6;
+  const OVERLAY_VERSION = 7;
   const STYLE_ID = "codex-efficiency-radar-style";
   const ROOT_ATTR = "data-codex-efficiency-root";
   const ENTRY_ATTR = "data-codex-efficiency-entry";
   const PANEL_ATTR = "data-codex-efficiency-panel";
-  const TABLE_ATTR = "data-codex-efficiency-table";
+  const GRID_ATTR = "data-codex-efficiency-grid";
+  const OPTION_ATTR = "data-codex-efficiency-option";
   const REFRESH_ATTR = "data-codex-efficiency-refresh";
   const STATUS_ATTR = "data-codex-efficiency-status";
   const SURFACE_EXPANDED_ATTR = "data-codex-efficiency-expanded";
   const LEGACY_BADGE_ATTR = "data-codex-efficiency-badges";
   const LEGACY_ROW_ATTR = "data-codex-efficiency-row";
   const REFRESH_TIMEOUT_MS = 30_000;
+  const selector = window.__codexEfficiencyRadarSelector;
+  if (!selector) return;
 
   const effortOrder = ["low", "medium", "high", "xhigh", "max", "ultra"];
-  const effortAliases = {
-    low: ["轻度", "低", "low", "light"],
-    medium: ["中", "标准", "medium", "standard"],
-    high: ["高", "high", "extended"],
-    xhigh: ["极高", "xhigh", "extrahigh"],
-    max: ["最高", "max", "maximum"],
-    ultra: ["ultra"]
-  };
-  const normalize = (value) =>
-    String(value ?? "")
-      .toLowerCase()
-      .replace(/gpt/g, "")
-      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "");
   const setText = (node, value) => {
     const text = String(value ?? "");
     if (node && node.textContent !== text) node.textContent = text;
@@ -39,241 +32,17 @@ function installEfficiencyOverlay(nextSnapshot) {
     const count = Number(value);
     return Number.isFinite(count) && count >= 0 ? Math.round(count) : null;
   };
-
-  const identifyEffort = (text) => {
-    const value = normalize(text);
-    const ordered = ["ultra", "xhigh", "max", "medium", "high", "low"];
-    return ordered.find((effort) =>
-      effortAliases[effort].some((alias) => {
-        const normalizedAlias = normalize(alias);
-        return normalizedAlias.length <= 1
-          ? value === normalizedAlias
-          : value === normalizedAlias || value.startsWith(normalizedAlias);
-      })
-    ) ?? null;
-  };
-
-  const identifyModel = (text, snapshot) => {
-    const value = normalize(text);
-    if (!value) return null;
-    return snapshot.models.find((model) =>
-      [model.id, model.label, model.shortLabel]
-        .filter(Boolean)
-        .some((alias) => {
-          const normalizedAlias = normalize(alias);
-          return normalizedAlias && value.includes(normalizedAlias);
-        })
-    ) ?? null;
+  const effortRank = (id, fallback = effortOrder.length) => {
+    const index = effortOrder.indexOf(id);
+    return index === -1 ? fallback : index;
   };
 
   const ensureStyle = () => {
     const style = document.getElementById(STYLE_ID) ?? document.createElement("style");
-    const css = `
-      [${ROOT_ATTR}] {
-        --cer-border: color-mix(in srgb, currentColor 20%, transparent);
-        --cer-border-strong: color-mix(in srgb, currentColor 38%, transparent);
-        --cer-surface: color-mix(in srgb, Canvas 94%, currentColor 6%);
-        --cer-surface-raised: color-mix(in srgb, Canvas 84%, currentColor 16%);
-        border-block-start: 2px solid var(--cer-border-strong);
-        box-sizing: border-box;
-        color: inherit;
-        flex: 0 0 auto;
-        font: inherit;
-        margin-block-start: 8px;
-        padding: 8px;
-        width: 100%;
-      }
-      [${ROOT_ATTR}], [${ROOT_ATTR}] * { box-sizing: border-box; }
-      [role="menu"][${SURFACE_EXPANDED_ATTR}] {
-        max-width: calc(100vw - 32px) !important;
-        width: min(760px, calc(100vw - 32px)) !important;
-      }
-      [${ENTRY_ATTR}] {
-        align-items: center;
-        appearance: none;
-        background: transparent;
-        border: 0;
-        border-radius: 8px;
-        color: inherit;
-        cursor: pointer;
-        display: flex;
-        font: inherit;
-        gap: 10px;
-        justify-content: flex-start;
-        min-height: 42px;
-        padding: 9px 10px;
-        text-align: start;
-        width: 100%;
-      }
-      [${ENTRY_ATTR}]:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
-      [${ENTRY_ATTR}]:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
-      [${ENTRY_ATTR}] .codex-efficiency-entry-icon {
-        align-items: center;
-        border: 1px solid var(--cer-border-strong);
-        border-radius: 6px;
-        display: inline-flex;
-        font-size: 14px;
-        font-weight: 700;
-        height: 24px;
-        justify-content: center;
-        width: 24px;
-      }
-      [${ENTRY_ATTR}] .codex-efficiency-entry-label { font-size: 14px; font-weight: 700; letter-spacing: .01em; }
-      [${ENTRY_ATTR}] .codex-efficiency-entry-summary {
-        font-size: 11px;
-        margin-inline-start: auto;
-        opacity: .78;
-        white-space: nowrap;
-      }
-      [${ENTRY_ATTR}] .codex-efficiency-entry-chevron {
-        display: inline-block;
-        font-size: 16px;
-        opacity: .78;
-        transform: rotate(0deg);
-        transition: transform 160ms ease;
-      }
-      [${ENTRY_ATTR}][aria-expanded="true"] .codex-efficiency-entry-chevron { transform: rotate(180deg); }
-      [${PANEL_ATTR}] {
-        background: var(--cer-surface);
-        border: 1px solid var(--cer-border);
-        border-radius: 12px;
-        box-shadow: 0 3px 14px color-mix(in srgb, currentColor 10%, transparent);
-        margin-block-start: 8px;
-        overflow: hidden;
-      }
-      [${PANEL_ATTR}][hidden] { display: none !important; }
-      .codex-efficiency-panel-heading {
-        align-items: baseline;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px 12px;
-        justify-content: space-between;
-        padding: 12px 14px 10px;
-      }
-      .codex-efficiency-panel-heading strong { font-size: 14px; font-weight: 750; letter-spacing: .01em; }
-      .codex-efficiency-panel-heading span { font-size: 11px; font-weight: 550; opacity: .82; }
-      .codex-efficiency-table-scroll {
-        max-height: min(360px, 55vh);
-        overflow: auto;
-        overscroll-behavior: contain;
-        scrollbar-color: color-mix(in srgb, currentColor 36%, transparent) transparent;
-      }
-      [${TABLE_ATTR}] {
-        border-collapse: separate;
-        border-spacing: 0;
-        font-size: 12px;
-        min-width: 680px;
-        width: 100%;
-      }
-      [${TABLE_ATTR}] th, [${TABLE_ATTR}] td {
-        border-block-start: 1px solid var(--cer-border);
-        padding: 10px 12px;
-        text-align: start;
-        vertical-align: middle;
-      }
-      [${TABLE_ATTR}] thead th {
-        background: var(--cer-surface-raised);
-        font-size: 12px;
-        font-weight: 750;
-        inset-block-start: 0;
-        position: sticky;
-        white-space: nowrap;
-        z-index: 2;
-      }
-      [${TABLE_ATTR}] thead th small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .04em; opacity: .72; }
-      [${TABLE_ATTR}] tbody tr:nth-child(even) { background: color-mix(in srgb, currentColor 4%, transparent); }
-      [${TABLE_ATTR}] tbody tr:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
-      [${TABLE_ATTR}] tbody th {
-        background: var(--cer-surface);
-        box-shadow: 1px 0 0 var(--cer-border-strong);
-        font-size: 12px;
-        font-weight: 750;
-        inset-inline-start: 0;
-        min-width: 150px;
-        position: sticky;
-        white-space: nowrap;
-        z-index: 1;
-      }
-      [${TABLE_ATTR}] td { min-width: 92px; }
-      .codex-efficiency-score-pair { display: grid; gap: 6px; }
-      .codex-efficiency-score {
-        align-items: baseline;
-        display: flex;
-        gap: 7px;
-        justify-content: space-between;
-        line-height: 1.35;
-        white-space: nowrap;
-      }
-      .codex-efficiency-score span {
-        background: color-mix(in srgb, currentColor 10%, transparent);
-        border: 1px solid var(--cer-border);
-        border-radius: 5px;
-        font-size: 10px;
-        font-weight: 750;
-        min-width: 34px;
-        opacity: .92;
-        padding: 2px 4px;
-        text-align: center;
-      }
-      .codex-efficiency-score strong { font-size: 15px; font-variant-numeric: tabular-nums; }
-      .codex-efficiency-score-software { opacity: .82; }
-      .codex-efficiency-empty { font-size: 13px; opacity: .58; text-align: center; }
-      .codex-efficiency-panel-footer {
-        align-items: center;
-        border-block-start: 1px solid var(--cer-border);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px 8px;
-        justify-content: space-between;
-        padding: 10px 12px;
-      }
-      [${STATUS_ATTR}] {
-        align-items: center;
-        display: inline-flex;
-        flex: 1 1 130px;
-        font-size: 10px;
-        gap: 6px;
-        line-height: 1.45;
-        min-width: 0;
-        opacity: .68;
-      }
-      [${STATUS_ATTR}]::before {
-        background: currentColor;
-        border-radius: 999px;
-        content: "";
-        flex: 0 0 auto;
-        height: 6px;
-        opacity: .72;
-        width: 6px;
-      }
-      [${ROOT_ATTR}][data-state="stale"] [${STATUS_ATTR}],
-      [${ROOT_ATTR}][data-state="error"] [${STATUS_ATTR}] { opacity: .92; }
-      [${REFRESH_ATTR}] {
-        appearance: none;
-        background: transparent;
-        border: 1px solid var(--cer-border-strong);
-        border-radius: 8px;
-        color: inherit;
-        cursor: pointer;
-        flex: 0 0 auto;
-        font: inherit;
-        font-size: 11px;
-        font-weight: 700;
-        min-height: 36px;
-        padding: 7px 12px;
-      }
-      [${REFRESH_ATTR}]:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
-      [${REFRESH_ATTR}]:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
-      [${REFRESH_ATTR}][data-loading="true"] { cursor: wait; opacity: .55; }
-      @media (prefers-reduced-motion: reduce) {
-        [${ENTRY_ATTR}] .codex-efficiency-entry-chevron { transition: none; }
-      }
-    `;
     if (!style.id) style.id = STYLE_ID;
-    if (style.textContent !== css) style.textContent = css;
+    if (style.textContent !== overlayCss) style.textContent = overlayCss;
     if (!style.isConnected) (document.head ?? document.documentElement).append(style);
   };
-
   const cleanupObsoleteUi = () => {
     for (const badge of document.querySelectorAll(`[${LEGACY_BADGE_ATTR}]`)) badge.remove();
     for (const row of document.querySelectorAll(`[${LEGACY_ROW_ATTR}]`)) {
@@ -283,62 +52,48 @@ function installEfficiencyOverlay(nextSnapshot) {
       if (!button.closest(`[${ROOT_ATTR}]`)) button.remove();
     }
     for (const surface of document.querySelectorAll(`[${SURFACE_EXPANDED_ATTR}]`)) {
-      const hasOpenPanel = [...surface.querySelectorAll(`[${PANEL_ATTR}]`)]
-        .some((panel) => !panel.hidden);
-      if (!hasOpenPanel) surface.removeAttribute(SURFACE_EXPANDED_ATTR);
+      const open = [...surface.querySelectorAll(`[${PANEL_ATTR}]`)].some((panel) => !panel.hidden);
+      if (!open) surface.removeAttribute(SURFACE_EXPANDED_ATTR);
     }
   };
   const directMenuItems = (menu) =>
     [...menu.querySelectorAll('[role="menuitemradio"], [role="menuitemcheckbox"], [role="menuitem"]')]
       .filter((item) => item.closest('[role="menu"]') === menu);
-
   const legacyMenuEvidence = (menu, snapshot) => {
-    const hasPickerMarker = Boolean(menu.querySelector(
+    const marked = Boolean(menu.querySelector(
       "[data-model-selected], [data-reasoning-selected], [data-model-picker-model-row], " +
       "[data-model-picker-view-toggle], [data-reasoning-slider]"
     ));
     const items = directMenuItems(menu);
-    const efforts = new Set(items.map((item) => identifyEffort(item.textContent)).filter(Boolean));
+    const efforts = new Set(
+      items.map((item) => selector.identifyEffort(item.textContent)).filter(Boolean)
+    );
     const models = new Set(
-      items.map((item) => identifyModel(item.textContent, snapshot)?.id).filter(Boolean)
+      items.map((item) => selector.identifyModel(item.textContent)?.id).filter(Boolean)
     );
     const text = menu.textContent ?? "";
-    const mentionsModel = /模型|model/i.test(text);
-    const mentionsReasoning = /推理强度|推理|reasoning|effort/i.test(text);
     return {
-      explicit: hasPickerMarker || (mentionsModel && mentionsReasoning),
+      explicit: marked || (/模型|model/i.test(text) && /推理强度|推理|reasoning|effort/i.test(text)),
       candidate: efforts.size >= 2 || models.size >= 2
     };
   };
-
   const findSurfaceHosts = (snapshot) => {
     const hosts = new Set();
-
     for (const picker of document.querySelectorAll("[data-model-picker-view]")) {
-      let foundPanel = false;
-      for (const track of picker.children) {
-        if (track.hasAttribute?.(ROOT_ATTR)) continue;
-        const panel = track.firstElementChild;
-        if (!panel || panel.hasAttribute?.(ROOT_ATTR)) continue;
-        hosts.add(panel);
-        foundPanel = true;
-      }
-      if (!foundPanel) hosts.add(picker);
+      hosts.add(picker.closest('[role="menu"]') ?? picker.parentElement ?? picker);
     }
 
     const legacyMenus = [...document.querySelectorAll('[role="menu"]')]
       .filter((menu) => !menu.closest(`[${ROOT_ATTR}]`))
-      .filter((menu) =>
-        !menu.closest("[data-model-picker-view]") && !menu.querySelector("[data-model-picker-view]")
-      )
+      .filter((menu) => !menu.querySelector("[data-model-picker-view]"))
       .map((menu) => ({ menu, evidence: legacyMenuEvidence(menu, snapshot) }));
     const openTrigger = [...document.querySelectorAll("[data-codex-intelligence-trigger]")]
       .some((trigger) =>
         trigger.getAttribute("aria-expanded") === "true" || trigger.dataset.state === "open"
       );
-    const hasPickerContext = openTrigger || legacyMenus.some(({ evidence }) => evidence.explicit);
+    const hasContext = openTrigger || legacyMenus.some(({ evidence }) => evidence.explicit);
     for (const { menu, evidence } of legacyMenus) {
-      if (evidence.explicit || (hasPickerContext && evidence.candidate)) hosts.add(menu);
+      if (evidence.explicit || (hasContext && evidence.candidate)) hosts.add(menu);
     }
     return [...hosts];
   };
@@ -349,17 +104,36 @@ function installEfficiencyOverlay(nextSnapshot) {
     for (const model of snapshot.models) {
       for (const effort of Array.isArray(model.efforts) ? model.efforts : []) {
         if (!effort?.id || columns.has(effort.id)) continue;
-        const knownOrder = effortOrder.indexOf(effort.id);
         columns.set(effort.id, {
           id: effort.id,
           label: effort.label || effort.id,
-          order: knownOrder === -1 ? fallbackOrder++ : knownOrder
+          order: effortRank(effort.id, fallbackOrder++)
         });
       }
     }
     return [...columns.values()].sort(
       (left, right) => left.order - right.order || left.label.localeCompare(right.label)
     );
+  };
+  const valuePick = (model) => {
+    const scored = (Array.isArray(model.efforts) ? model.efforts : [])
+      .map((effort, index) => {
+        const comprehensive = safeScore(effort?.comprehensiveIq);
+        const software = safeScore(effort?.softwareIq);
+        if (!effort?.id || comprehensive == null || software == null) return null;
+        return {
+          id: effort.id,
+          average: (comprehensive + software) / 2,
+          rank: effortRank(effort.id, effortOrder.length + index)
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.rank - right.rank);
+    if (scored.length < 2) return null;
+    const peak = Math.max(...scored.map((effort) => effort.average));
+    const highestRank = Math.max(...scored.map((effort) => effort.rank));
+    const candidate = scored.find((effort) => effort.average >= peak * 0.95);
+    return candidate && candidate.rank < highestRank ? candidate.id : null;
   };
   const metricNode = (kind, label, value) => {
     const metric = document.createElement("span");
@@ -371,124 +145,160 @@ function installEfficiencyOverlay(nextSnapshot) {
     metric.append(metricLabel, score);
     return metric;
   };
+  const createOption = (state, model, modelLabel, column, effort, isValuePick) => {
+    const comprehensive = safeScore(effort?.comprehensiveIq);
+    const software = safeScore(effort?.softwareIq);
+    const cell = document.createElement("div");
+    cell.setAttribute("role", "gridcell");
+    if (comprehensive == null && software == null) {
+      cell.className = "codex-efficiency-empty";
+      cell.textContent = "—";
+      return cell;
+    }
 
-  const createTable = (snapshot) => {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.setAttribute(OPTION_ATTR, "true");
+    option.setAttribute("aria-pressed", "false");
+    option.dataset.modelId = model.id ?? "";
+    option.dataset.effortId = column.id;
+    option.dataset.valuePick = String(isValuePick);
+    const badges = document.createElement("span");
+    badges.className = "codex-efficiency-option-badges";
+    const valueBadge = document.createElement("span");
+    valueBadge.className = "codex-efficiency-badge codex-efficiency-badge-value";
+    valueBadge.textContent = "优选";
+    const currentBadge = document.createElement("span");
+    currentBadge.className = "codex-efficiency-badge codex-efficiency-badge-current";
+    currentBadge.textContent = "当前";
+    badges.append(valueBadge, currentBadge);
+
+    const pair = document.createElement("span");
+    pair.className = "codex-efficiency-score-pair";
+    if (comprehensive != null) pair.append(metricNode("comprehensive", "综合", comprehensive));
+    if (software != null) pair.append(metricNode("software", "工程", software));
+    option.append(badges, pair);
+
+    const details = [];
+    const softwareSamples = safeCount(effort?.softwareSamples);
+    const visualSamples = safeCount(effort?.visualSamples);
+    const runs24h = safeCount(effort?.runs24h);
+    if (softwareSamples != null) details.push(`软件样本 ${softwareSamples}`);
+    if (visualSamples != null) details.push(`视觉样本 ${visualSamples}`);
+    if (runs24h != null) details.push(`24 小时运行 ${runs24h}`);
+    if (isValuePick) details.push("优选：达到该模型峰值 95% 的最低档位");
+    if (details.length) option.title = details.join("，");
+    option.setAttribute(
+      "aria-label",
+      `${modelLabel}，${column.label}，综合智能 ${comprehensive ?? "无"}，软件工程 ${software ?? "无"}，点击选择`
+    );
+    option.addEventListener("pointerdown", (event) => event.stopPropagation());
+    option.addEventListener("click", (event) =>
+      state.requestSelection(event, option, model.id, column.id, `${modelLabel} · ${column.label}`)
+    );
+    cell.append(option);
+    return cell;
+  };
+  const createGrid = (state, snapshot) => {
     const scroll = document.createElement("div");
-    scroll.className = "codex-efficiency-table-scroll";
-    const table = document.createElement("table");
-    table.setAttribute(TABLE_ATTR, "true");
-    table.setAttribute("aria-label", "Codex 模型与推理强度效率值");
-
+    scroll.className = "codex-efficiency-map-scroll";
+    const grid = document.createElement("div");
+    grid.setAttribute(GRID_ATTR, "true");
+    grid.setAttribute("role", "grid");
+    grid.setAttribute("aria-label", "Codex 模型与推理强度效率能力地图");
     const columns = effortColumns(snapshot);
-    const head = document.createElement("thead");
-    const headRow = document.createElement("tr");
-    const modelHeader = document.createElement("th");
-    modelHeader.scope = "col";
+    const template = `minmax(138px, 1.25fr) repeat(${columns.length}, minmax(94px, 1fr))`;
+    grid.style.setProperty("--cer-map-columns", template);
+    grid.style.setProperty("--cer-map-width", `${Math.max(650, 150 + columns.length * 104)}px`);
+
+    const head = document.createElement("div");
+    head.className = "codex-efficiency-map-head";
+    head.setAttribute("role", "row");
+    const modelHeader = document.createElement("span");
+    modelHeader.className = "codex-efficiency-model-head";
+    modelHeader.setAttribute("role", "columnheader");
     modelHeader.textContent = "模型";
-    headRow.append(modelHeader);
+    head.append(modelHeader);
     for (const column of columns) {
-      const header = document.createElement("th");
-      header.scope = "col";
+      const header = document.createElement("span");
+      header.className = "codex-efficiency-effort-head";
+      header.setAttribute("role", "columnheader");
       header.dataset.effortId = column.id;
       const label = document.createElement("span");
       label.textContent = column.label;
       const code = document.createElement("small");
       code.textContent = column.id.toUpperCase();
       header.append(label, code);
-      headRow.append(header);
+      head.append(header);
     }
-    head.append(headRow);
+    grid.append(head);
 
-    const body = document.createElement("tbody");
     for (const model of snapshot.models) {
-      const row = document.createElement("tr");
+      const row = document.createElement("div");
+      row.className = "codex-efficiency-map-row";
+      row.setAttribute("role", "row");
       row.dataset.modelId = model.id ?? "";
-      const modelName = document.createElement("th");
-      modelName.scope = "row";
-      modelName.textContent = model.label || model.shortLabel || model.id || "未知模型";
+      const modelName = document.createElement("span");
+      modelName.className = "codex-efficiency-model-label";
+      modelName.setAttribute("role", "rowheader");
+      const modelLabel = model.label || model.shortLabel || model.id || "未知模型";
+      const label = document.createElement("span");
+      label.textContent = modelLabel;
+      const id = document.createElement("small");
+      id.textContent = model.id || "";
+      modelName.append(label, id);
       row.append(modelName);
-
       const efforts = new Map(
         (Array.isArray(model.efforts) ? model.efforts : [])
           .filter((effort) => effort?.id)
           .map((effort) => [effort.id, effort])
       );
+      const pick = valuePick(model);
       for (const column of columns) {
-        const cell = document.createElement("td");
-        cell.dataset.effortId = column.id;
-        const effort = efforts.get(column.id);
-        const comprehensive = safeScore(effort?.comprehensiveIq);
-        const software = safeScore(effort?.softwareIq);
-        if (comprehensive == null && software == null) {
-          cell.className = "codex-efficiency-empty";
-          cell.textContent = "—";
-        } else {
-          const pair = document.createElement("span");
-          pair.className = "codex-efficiency-score-pair";
-          if (comprehensive != null) pair.append(metricNode("comprehensive", "综合", comprehensive));
-          if (software != null) pair.append(metricNode("software", "工程", software));
-          cell.append(pair);
-          const details = [];
-          const softwareSamples = safeCount(effort?.softwareSamples);
-          const visualSamples = safeCount(effort?.visualSamples);
-          const runs24h = safeCount(effort?.runs24h);
-          if (softwareSamples != null) details.push(`软件样本 ${softwareSamples}`);
-          if (visualSamples != null) details.push(`视觉样本 ${visualSamples}`);
-          if (runs24h != null) details.push(`24 小时运行 ${runs24h}`);
-          if (details.length) cell.title = details.join("，");
-          cell.setAttribute(
-            "aria-label",
-            `${modelName.textContent}，${column.label}，综合智能 ${comprehensive ?? "无"}，软件工程 ${software ?? "无"}`
-          );
-        }
-        row.append(cell);
+        row.append(createOption(
+          state,
+          model,
+          modelLabel,
+          column,
+          efforts.get(column.id),
+          pick === column.id
+        ));
       }
-      body.append(row);
+      grid.append(row);
     }
-    table.append(head, body);
-    scroll.append(table);
+    scroll.append(grid);
     return scroll;
   };
+
+  const readSelection = (root) => selector.read(root);
 
   const readableTime = (value) => {
     const timestamp = Date.parse(value);
     if (!Number.isFinite(timestamp)) return "时间未知";
     return new Intl.DateTimeFormat("zh-CN", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false
+      month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false
     }).format(timestamp);
   };
   const statusPresentation = (state) => {
     if (state.refreshing) return { kind: "loading", text: "正在重新核对第三方数据…" };
-    if (state.transientError) return { kind: "error", text: state.transientError };
-
-    const snapshot = state.snapshot;
-    const warnings = Array.isArray(snapshot.warnings)
-      ? snapshot.warnings.filter((warning) => typeof warning === "string" && warning.trim())
+    if (state.refreshError) return { kind: "error", text: state.refreshError };
+    if (state.selectionState) return state.selectionState;
+    const warnings = Array.isArray(state.snapshot.warnings)
+      ? state.snapshot.warnings.filter((warning) => typeof warning === "string" && warning.trim())
       : [];
-    const source = snapshot.source && typeof snapshot.source === "object" ? snapshot.source : {};
+    const source = state.snapshot.source && typeof state.snapshot.source === "object"
+      ? state.snapshot.source
+      : {};
     const time = readableTime(source.dataUpdatedAt ?? source.checkedAt);
     if (warnings.length) {
       return { kind: "stale", text: `最近一次成功快照 · ${time}`, title: warnings.join(" ") };
     }
-    if (source.refreshState === "stale") {
-      return { kind: "stale", text: `最近一次成功快照 · ${time}` };
-    }
-    if (source.refreshState === "cooldown") {
-      return { kind: "cooldown", text: `源站共享缓存 · ${time}` };
-    }
+    if (source.refreshState === "stale") return { kind: "stale", text: `最近一次成功快照 · ${time}` };
+    if (source.refreshState === "cooldown") return { kind: "cooldown", text: `源站共享缓存 · ${time}` };
     return { kind: "current", text: `第三方社区快照 · ${time}` };
   };
-
   const snapshotSignature = (snapshot) => {
-    const source = JSON.stringify({
-      models: snapshot.models,
-      source: snapshot.source,
-      warnings: snapshot.warnings
-    });
+    const source = JSON.stringify({ models: snapshot.models, source: snapshot.source, warnings: snapshot.warnings });
     let hash = 2166136261;
     for (let index = 0; index < source.length; index += 1) {
       hash ^= source.charCodeAt(index);
@@ -496,16 +306,27 @@ function installEfficiencyOverlay(nextSnapshot) {
     }
     return `${source.length}:${hash >>> 0}`;
   };
-
   const panelHeading = () => {
     const heading = document.createElement("div");
     heading.className = "codex-efficiency-panel-heading";
+    const titleGroup = document.createElement("span");
+    titleGroup.className = "codex-efficiency-panel-title";
     const title = document.createElement("strong");
-    title.textContent = "效率值矩阵 · 模型 × 推理强度";
-    const legend = document.createElement("span");
-    legend.textContent = "综合智能 / 软件工程";
-    heading.append(title, legend);
+    title.textContent = "效率能力地图";
+    const hint = document.createElement("span");
+    hint.textContent = "点击任意组合即可切换模型与推理档位";
+    titleGroup.append(title, hint);
+    const metrics = document.createElement("span");
+    metrics.className = "codex-efficiency-panel-metrics";
+    metrics.textContent = "综合智能 / 软件工程";
+    heading.append(titleGroup, metrics);
     return heading;
+  };
+  const mapLegend = () => {
+    const legend = document.createElement("div");
+    legend.className = "codex-efficiency-map-legend";
+    legend.textContent = "优选：以推理档位为成本代理，达到该模型峰值双指标均值 95% 的最低档";
+    return legend;
   };
   const panelFooter = (state) => {
     const footer = document.createElement("div");
@@ -520,58 +341,56 @@ function installEfficiencyOverlay(nextSnapshot) {
     footer.append(status, refresh);
     return footer;
   };
-
   const updateEntryControls = (state, root) => {
     const panel = root.querySelector(`[${PANEL_ATTR}]`);
     const entry = root.querySelector(`[${ENTRY_ATTR}]`);
     const refresh = root.querySelector(`[${REFRESH_ATTR}]`);
     const status = root.querySelector(`[${STATUS_ATTR}]`);
-    const summary = root.querySelector(".codex-efficiency-entry-summary");
     if (!panel || !entry || !refresh || !status) return;
-
     entry.setAttribute("aria-expanded", String(!panel.hidden));
     root.dataset.expanded = String(!panel.hidden);
     const surface = root.closest('[role="menu"]');
     if (surface) {
-      const hasOpenPanel = [...surface.querySelectorAll(`[${PANEL_ATTR}]`)]
-        .some((candidate) => !candidate.hidden);
-      if (hasOpenPanel) surface.setAttribute(SURFACE_EXPANDED_ATTR, "true");
+      const open = [...surface.querySelectorAll(`[${PANEL_ATTR}]`)].some((candidate) => !candidate.hidden);
+      if (open) surface.setAttribute(SURFACE_EXPANDED_ATTR, "true");
       else surface.removeAttribute(SURFACE_EXPANDED_ATTR);
     }
-    setText(summary, `${state.snapshot.models.length} 个模型`);
-    if (state.refreshing) refresh.setAttribute("disabled", "");
-    else refresh.removeAttribute("disabled");
+    setText(root.querySelector(".codex-efficiency-entry-summary"), `${state.snapshot.models.length} 个模型`);
+    refresh.toggleAttribute("disabled", state.refreshing);
     refresh.dataset.loading = String(state.refreshing);
     setText(refresh, state.refreshing ? "正在刷新…" : "刷新效率值");
-
+    const selected = readSelection(root);
+    for (const option of root.querySelectorAll(`[${OPTION_ATTR}]`)) {
+      const active = selected.model?.id === option.dataset.modelId && selected.effort === option.dataset.effortId;
+      option.dataset.selected = String(active);
+      option.setAttribute("aria-pressed", String(active));
+      option.toggleAttribute("disabled", Boolean(state.selecting));
+    }
     const presentation = statusPresentation(state);
     root.dataset.state = presentation.kind;
     setText(status, presentation.text);
     if (presentation.title) status.title = presentation.title;
     else status.removeAttribute("title");
   };
-
   const renderEntry = (state, root, force = false) => {
     const signature = snapshotSignature(state.snapshot);
     const panel = root.querySelector(`[${PANEL_ATTR}]`);
     if (!panel) return;
     if (force || root.dataset.signature !== signature) {
-      const wasHidden = panel.hidden;
-      panel.replaceChildren(panelHeading(), createTable(state.snapshot), panelFooter(state));
-      panel.hidden = wasHidden;
+      const hidden = panel.hidden;
+      panel.replaceChildren(panelHeading(), createGrid(state, state.snapshot), mapLegend(), panelFooter(state));
+      panel.hidden = hidden;
       root.dataset.signature = signature;
     }
     updateEntryControls(state, root);
   };
-
   const createEntry = (state, host) => {
     const existing = [...host.children].find((child) => child.hasAttribute?.(ROOT_ATTR));
     if (existing) return existing;
-
     const root = document.createElement("div");
     root.setAttribute(ROOT_ATTR, "true");
     const panelId = `codex-efficiency-panel-${state.nextEntryId++}`;
-
+    if (host.getAttribute?.("role") === "menu") root.setAttribute("role", "none");
     const entry = document.createElement("button");
     entry.type = "button";
     entry.setAttribute(ENTRY_ATTR, "true");
@@ -581,10 +400,10 @@ function installEfficiencyOverlay(nextSnapshot) {
     const icon = document.createElement("span");
     icon.className = "codex-efficiency-entry-icon";
     icon.setAttribute("aria-hidden", "true");
-    icon.textContent = "▦";
+    icon.textContent = "◇";
     const label = document.createElement("span");
     label.className = "codex-efficiency-entry-label";
-    label.textContent = "查看效率值";
+    label.textContent = "查看效率地图";
     const summary = document.createElement("span");
     summary.className = "codex-efficiency-entry-summary";
     const chevron = document.createElement("span");
@@ -592,14 +411,12 @@ function installEfficiencyOverlay(nextSnapshot) {
     chevron.setAttribute("aria-hidden", "true");
     chevron.textContent = "⌄";
     entry.append(icon, label, summary, chevron);
-
     const panel = document.createElement("section");
     panel.id = panelId;
     panel.hidden = true;
     panel.setAttribute(PANEL_ATTR, "true");
     panel.setAttribute("role", "region");
-    panel.setAttribute("aria-label", "Codex 效率值表格");
-
+    panel.setAttribute("aria-label", "Codex 效率能力地图");
     entry.addEventListener("pointerdown", (event) => event.stopPropagation());
     entry.addEventListener("click", (event) => {
       event.preventDefault();
@@ -608,6 +425,7 @@ function installEfficiencyOverlay(nextSnapshot) {
     });
     root.addEventListener("pointerdown", (event) => event.stopPropagation());
     root.addEventListener("click", (event) => event.stopPropagation());
+    root.addEventListener("keydown", (event) => event.stopPropagation());
     root.append(entry, panel);
     host.append(root);
     return root;
@@ -624,6 +442,7 @@ function installEfficiencyOverlay(nextSnapshot) {
 
   const state = window[ROOT_KEY] ?? {
     version: OVERLAY_VERSION,
+    selectorContract: nextSelectorContract,
     snapshot: nextSnapshot,
     scheduled: false,
     observer: null,
@@ -631,16 +450,16 @@ function installEfficiencyOverlay(nextSnapshot) {
     refreshing: false,
     refreshTimer: null,
     refreshGeneration: 0,
-    transientError: null,
+    refreshError: null,
+    selecting: null,
+    selectionState: null,
     nextEntryId: 1,
     render(force = false) {
       ensureStyle();
       cleanupObsoleteUi();
       if (this.openEntry && !this.openEntry.isConnected) this.openEntry = null;
       for (const host of findSurfaceHosts(this.snapshot)) createEntry(this, host);
-      for (const root of document.querySelectorAll(`[${ROOT_ATTR}]`)) {
-        renderEntry(this, root, force);
-      }
+      for (const root of document.querySelectorAll(`[${ROOT_ATTR}]`)) renderEntry(this, root, force);
     },
     schedule(force = false) {
       if (this.scheduled) return;
@@ -655,8 +474,8 @@ function installEfficiencyOverlay(nextSnapshot) {
       if (!panel) return;
       const shouldOpen = panel.hidden;
       if (shouldOpen && this.openEntry && this.openEntry !== root) {
-        const previousPanel = this.openEntry.querySelector(`[${PANEL_ATTR}]`);
-        if (previousPanel) previousPanel.hidden = true;
+        const previous = this.openEntry.querySelector(`[${PANEL_ATTR}]`);
+        if (previous) previous.hidden = true;
         updateEntryControls(this, this.openEntry);
       }
       panel.hidden = !shouldOpen;
@@ -664,8 +483,23 @@ function installEfficiencyOverlay(nextSnapshot) {
       updateEntryControls(this, root);
     },
     updateAllControls() {
-      for (const root of document.querySelectorAll(`[${ROOT_ATTR}]`)) {
-        updateEntryControls(this, root);
+      for (const root of document.querySelectorAll(`[${ROOT_ATTR}]`)) updateEntryControls(this, root);
+    },
+    async requestSelection(event, option, modelId, effortId, label) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      if (this.selecting || !modelId || !effortId) return;
+      this.selecting = { modelId, effortId };
+      this.selectionState = { kind: "selecting", text: `正在切换到 ${label}…` };
+      this.updateAllControls();
+      try {
+        await selector.select(option, modelId, effortId);
+        this.selectionState = { kind: "current", text: `已切换到 ${label}` };
+      } catch (error) {
+        this.selectionState = { kind: "error", text: `切换失败：${error?.message || "未知错误"}` };
+      } finally {
+        this.selecting = null;
+        this.updateAllControls();
       }
     },
     failRefresh(message, generation = this.refreshGeneration) {
@@ -673,7 +507,7 @@ function installEfficiencyOverlay(nextSnapshot) {
       if (this.refreshTimer) clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
       this.refreshing = false;
-      this.transientError = `刷新失败：${message || "未知错误"}`;
+      this.refreshError = `刷新失败：${message || "未知错误"}`;
       this.updateAllControls();
     },
     requestRefresh(event) {
@@ -682,15 +516,12 @@ function installEfficiencyOverlay(nextSnapshot) {
       if (this.refreshing) return;
       const generation = ++this.refreshGeneration;
       this.refreshing = true;
-      this.transientError = null;
+      this.refreshError = null;
+      this.selectionState = null;
       this.updateAllControls();
       try {
-        if (typeof window.codexEfficiencyRefresh !== "function") {
-          throw new Error("刷新桥接未连接");
-        }
-        const result = window.codexEfficiencyRefresh(
-          JSON.stringify({ requestedAt: Date.now(), force: true })
-        );
+        if (typeof window.codexEfficiencyRefresh !== "function") throw new Error("刷新桥接未连接");
+        const result = window.codexEfficiencyRefresh(JSON.stringify({ requestedAt: Date.now(), force: true }));
         if (result && typeof result.then === "function") {
           result.catch((error) => this.failRefresh(error?.message, generation));
         }
@@ -703,13 +534,16 @@ function installEfficiencyOverlay(nextSnapshot) {
         this.failRefresh(error?.message, generation);
       }
     },
-    updateSnapshot(snapshot) {
+    updateSnapshot(snapshot, selectorContract) {
       this.snapshot = snapshot;
+      this.selectorContract = selectorContract;
+      selector.update(snapshot, selectorContract);
       this.refreshGeneration += 1;
       if (this.refreshTimer) clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
       this.refreshing = false;
-      this.transientError = null;
+      this.refreshError = null;
+      this.selectionState = null;
       this.schedule(true);
     }
   };
@@ -719,7 +553,7 @@ function installEfficiencyOverlay(nextSnapshot) {
     state.observer = new MutationObserver(() => state.schedule());
     state.observer.observe(document.documentElement, { childList: true, subtree: true });
   }
-  state.updateSnapshot(nextSnapshot);
+  state.updateSnapshot(nextSnapshot, nextSelectorContract);
 }
 
 function safeJson(value) {
@@ -729,6 +563,8 @@ function safeJson(value) {
     .replaceAll("\u2029", "\\u2029");
 }
 
-export function buildInjectionSource(snapshot) {
-  return `(${installEfficiencyOverlay.toString()})(${safeJson(snapshot)});`;
+export function buildInjectionSource(snapshot, selectorContract = "auto") {
+  const bridge = buildSelectorBridgeSource(snapshot, selectorContract);
+  const overlay = `(${installEfficiencyOverlay.toString()})(${safeJson(snapshot)},${safeJson(OVERLAY_CSS)},${safeJson(selectorContract)});`;
+  return `${bridge}${overlay}`;
 }

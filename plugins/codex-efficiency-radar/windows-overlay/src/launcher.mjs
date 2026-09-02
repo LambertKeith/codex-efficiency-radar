@@ -120,7 +120,7 @@ const clients = new Map();
 let consecutiveDiscoveryFailures = 0;
 
 async function broadcast(nextSnapshot) {
-  const source = buildInjectionSource(nextSnapshot);
+  const source = buildInjectionSource(nextSnapshot, target.selectorContract);
   await Promise.allSettled(
     [...clients.values()].map((client) =>
       client.send("Runtime.evaluate", { expression: source, awaitPromise: false })
@@ -152,7 +152,7 @@ async function attachTarget(targetInfo) {
   await client.send("Runtime.enable");
   await client.send("Page.enable");
   await client.send("Runtime.addBinding", { name: "codexEfficiencyRefresh" });
-  const source = buildInjectionSource(snapshot);
+  const source = buildInjectionSource(snapshot, target.selectorContract);
   await client.send("Page.addScriptToEvaluateOnNewDocument", { source });
   await client.send("Runtime.evaluate", { expression: source, awaitPromise: false });
   log(`已连接界面：${targetInfo.title || targetInfo.url}`);
