@@ -1,6 +1,6 @@
 {
   "name": "codex-efficiency-radar",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "type": "module",
   "description": "Visualize CodexRadar intelligence and software-engineering efficiency scores.",

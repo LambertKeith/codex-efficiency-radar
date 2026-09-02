@@ -24,7 +24,8 @@ const stateDir = path.join(overlayRoot, "state");
 const launchAgentLabel = "com.lambertkeith.codex-efficiency-radar";
 const launchAgentsDir = path.join(os.homedir(), "Library", "LaunchAgents");
 const launchAgentPath = path.join(launchAgentsDir, `${launchAgentLabel}.plist`);
-const launchDomain = `gui/${process.getuid()}`;
+const launchDomain =
+  process.platform === "darwin" ? `gui/${process.getuid()}` : null;
 
 function escapeXml(value) {
   return String(value)

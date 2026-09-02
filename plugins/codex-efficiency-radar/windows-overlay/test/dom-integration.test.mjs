@@ -198,8 +198,10 @@ test("真实 MutationObserver 在宿主替换后为新面板补入口且不残�
 
 test("入口展开按模型和推理强度组织的双值矩阵", async () => {
   const { window, document } = createDom(`
-    <div data-model-picker-view>
-      <div><section id="picker-panel"><button>选择模型</button></section></div>
+    <div role="menu" id="picker-menu">
+      <div data-model-picker-view>
+        <div><section id="picker-panel"><button>选择模型</button></section></div>
+      </div>
     </div>
   `);
 
@@ -212,6 +214,10 @@ test("入口展开按模型和推理强度组织的双值矩阵", async () => {
 
   assert.equal(entry.getAttribute("aria-expanded"), "true");
   assert.equal(panel.hidden, false);
+  assert.equal(
+    document.querySelector("#picker-menu").getAttribute("data-codex-efficiency-expanded"),
+    "true"
+  );
 
   const table = panel.querySelector("[data-codex-efficiency-table]");
   const headers = [...table.querySelectorAll("thead th")];
@@ -226,16 +232,20 @@ test("入口展开按模型和推理强度组织的双值矩阵", async () => {
   const rowByModel = new Map(
     rows.map((row) => [row.children[0].textContent.trim(), [...row.children].map((cell) => cell.textContent)])
   );
-  assert.match(rowByModel.get("GPT-5.6 Sol")[2], /综\s*98/);
-  assert.match(rowByModel.get("GPT-5.6 Sol")[2], /工\s*97/);
-  assert.match(rowByModel.get("GPT-5.6 Sol")[3], /综\s*104/);
-  assert.match(rowByModel.get("GPT-5.6 Sol")[3], /工\s*101/);
-  assert.match(rowByModel.get("GPT-5.6 Terra")[1], /综\s*81/);
-  assert.match(rowByModel.get("GPT-5.6 Terra")[1], /工\s*84/);
+  assert.match(rowByModel.get("GPT-5.6 Sol")[2], /综合\s*98/);
+  assert.match(rowByModel.get("GPT-5.6 Sol")[2], /工程\s*97/);
+  assert.match(rowByModel.get("GPT-5.6 Sol")[3], /综合\s*104/);
+  assert.match(rowByModel.get("GPT-5.6 Sol")[3], /工程\s*101/);
+  assert.match(rowByModel.get("GPT-5.6 Terra")[1], /综合\s*81/);
+  assert.match(rowByModel.get("GPT-5.6 Terra")[1], /工程\s*84/);
 
   entry.click();
   assert.equal(entry.getAttribute("aria-expanded"), "false");
   assert.equal(panel.hidden, true);
+  assert.equal(
+    document.querySelector("#picker-menu").hasAttribute("data-codex-efficiency-expanded"),
+    false
+  );
 });
 
 test("面板底部刷新可桥接，快照更新解除 loading 且重复注入不重复", async () => {
@@ -275,8 +285,8 @@ test("面板底部刷新可桥接，快照更新解除 loading 且重复注入�
   const solRow = [...document.querySelectorAll("tbody tr")].find(
     (row) => row.children[0].textContent.trim() === "GPT-5.6 Sol"
   );
-  assert.match(solRow.children[2].textContent, /综\s*109/);
-  assert.match(solRow.children[2].textContent, /工\s*108/);
+  assert.match(solRow.children[2].textContent, /综合\s*109/);
+  assert.match(solRow.children[2].textContent, /工程\s*108/);
 
   install(window, document, updatedSnapshot);
   await settle();

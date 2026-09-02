@@ -1,6 +1,6 @@
 function installEfficiencyOverlay(nextSnapshot) {
   const ROOT_KEY = "__codexEfficiencyRadarOverlay";
-  const OVERLAY_VERSION = 4;
+  const OVERLAY_VERSION = 6;
   const STYLE_ID = "codex-efficiency-radar-style";
   const ROOT_ATTR = "data-codex-efficiency-root";
   const ENTRY_ATTR = "data-codex-efficiency-entry";
@@ -8,6 +8,7 @@ function installEfficiencyOverlay(nextSnapshot) {
   const TABLE_ATTR = "data-codex-efficiency-table";
   const REFRESH_ATTR = "data-codex-efficiency-refresh";
   const STATUS_ATTR = "data-codex-efficiency-status";
+  const SURFACE_EXPANDED_ATTR = "data-codex-efficiency-expanded";
   const LEGACY_BADGE_ATTR = "data-codex-efficiency-badges";
   const LEGACY_ROW_ATTR = "data-codex-efficiency-row";
   const REFRESH_TIMEOUT_MS = 30_000;
@@ -69,20 +70,24 @@ function installEfficiencyOverlay(nextSnapshot) {
     const style = document.getElementById(STYLE_ID) ?? document.createElement("style");
     const css = `
       [${ROOT_ATTR}] {
-        --cer-border: color-mix(in srgb, currentColor 14%, transparent);
-        --cer-border-strong: color-mix(in srgb, currentColor 24%, transparent);
-        --cer-surface: color-mix(in srgb, Canvas 96%, currentColor 4%);
-        --cer-surface-raised: color-mix(in srgb, Canvas 90%, currentColor 10%);
-        border-block-start: 1px solid var(--cer-border);
+        --cer-border: color-mix(in srgb, currentColor 20%, transparent);
+        --cer-border-strong: color-mix(in srgb, currentColor 38%, transparent);
+        --cer-surface: color-mix(in srgb, Canvas 94%, currentColor 6%);
+        --cer-surface-raised: color-mix(in srgb, Canvas 84%, currentColor 16%);
+        border-block-start: 2px solid var(--cer-border-strong);
         box-sizing: border-box;
         color: inherit;
         flex: 0 0 auto;
         font: inherit;
-        margin-block-start: 6px;
-        padding: 6px;
+        margin-block-start: 8px;
+        padding: 8px;
         width: 100%;
       }
       [${ROOT_ATTR}], [${ROOT_ATTR}] * { box-sizing: border-box; }
+      [role="menu"][${SURFACE_EXPANDED_ATTR}] {
+        max-width: calc(100vw - 32px) !important;
+        width: min(760px, calc(100vw - 32px)) !important;
+      }
       [${ENTRY_ATTR}] {
         align-items: center;
         appearance: none;
@@ -93,10 +98,10 @@ function installEfficiencyOverlay(nextSnapshot) {
         cursor: pointer;
         display: flex;
         font: inherit;
-        gap: 8px;
+        gap: 10px;
         justify-content: flex-start;
-        min-height: 36px;
-        padding: 7px 8px;
+        min-height: 42px;
+        padding: 9px 10px;
         text-align: start;
         width: 100%;
       }
@@ -105,24 +110,25 @@ function installEfficiencyOverlay(nextSnapshot) {
       [${ENTRY_ATTR}] .codex-efficiency-entry-icon {
         align-items: center;
         border: 1px solid var(--cer-border-strong);
-        border-radius: 5px;
+        border-radius: 6px;
         display: inline-flex;
-        font-size: 12px;
-        height: 20px;
+        font-size: 14px;
+        font-weight: 700;
+        height: 24px;
         justify-content: center;
-        width: 20px;
+        width: 24px;
       }
-      [${ENTRY_ATTR}] .codex-efficiency-entry-label { font-size: 12px; font-weight: 650; }
+      [${ENTRY_ATTR}] .codex-efficiency-entry-label { font-size: 14px; font-weight: 700; letter-spacing: .01em; }
       [${ENTRY_ATTR}] .codex-efficiency-entry-summary {
-        font-size: 10px;
+        font-size: 11px;
         margin-inline-start: auto;
-        opacity: .58;
+        opacity: .78;
         white-space: nowrap;
       }
       [${ENTRY_ATTR}] .codex-efficiency-entry-chevron {
         display: inline-block;
-        font-size: 13px;
-        opacity: .64;
+        font-size: 16px;
+        opacity: .78;
         transform: rotate(0deg);
         transition: transform 160ms ease;
       }
@@ -130,8 +136,9 @@ function installEfficiencyOverlay(nextSnapshot) {
       [${PANEL_ATTR}] {
         background: var(--cer-surface);
         border: 1px solid var(--cer-border);
-        border-radius: 10px;
-        margin-block-start: 6px;
+        border-radius: 12px;
+        box-shadow: 0 3px 14px color-mix(in srgb, currentColor 10%, transparent);
+        margin-block-start: 8px;
         overflow: hidden;
       }
       [${PANEL_ATTR}][hidden] { display: none !important; }
@@ -139,64 +146,78 @@ function installEfficiencyOverlay(nextSnapshot) {
         align-items: baseline;
         display: flex;
         flex-wrap: wrap;
-        gap: 4px 10px;
+        gap: 6px 12px;
         justify-content: space-between;
-        padding: 9px 10px 8px;
+        padding: 12px 14px 10px;
       }
-      .codex-efficiency-panel-heading strong { font-size: 11px; letter-spacing: .01em; }
-      .codex-efficiency-panel-heading span { font-size: 9px; opacity: .62; }
+      .codex-efficiency-panel-heading strong { font-size: 14px; font-weight: 750; letter-spacing: .01em; }
+      .codex-efficiency-panel-heading span { font-size: 11px; font-weight: 550; opacity: .82; }
       .codex-efficiency-table-scroll {
-        max-height: min(260px, 42vh);
+        max-height: min(360px, 55vh);
         overflow: auto;
         overscroll-behavior: contain;
+        scrollbar-color: color-mix(in srgb, currentColor 36%, transparent) transparent;
       }
       [${TABLE_ATTR}] {
         border-collapse: separate;
         border-spacing: 0;
-        font-size: 10px;
-        min-width: 560px;
+        font-size: 12px;
+        min-width: 680px;
         width: 100%;
       }
       [${TABLE_ATTR}] th, [${TABLE_ATTR}] td {
         border-block-start: 1px solid var(--cer-border);
-        padding: 7px 8px;
+        padding: 10px 12px;
         text-align: start;
         vertical-align: middle;
       }
       [${TABLE_ATTR}] thead th {
         background: var(--cer-surface-raised);
-        font-size: 9px;
-        font-weight: 650;
+        font-size: 12px;
+        font-weight: 750;
         inset-block-start: 0;
         position: sticky;
         white-space: nowrap;
         z-index: 2;
       }
-      [${TABLE_ATTR}] thead th small { display: block; font-size: 8px; font-weight: 500; opacity: .52; }
+      [${TABLE_ATTR}] thead th small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .04em; opacity: .72; }
+      [${TABLE_ATTR}] tbody tr:nth-child(even) { background: color-mix(in srgb, currentColor 4%, transparent); }
+      [${TABLE_ATTR}] tbody tr:hover { background: color-mix(in srgb, currentColor 10%, transparent); }
       [${TABLE_ATTR}] tbody th {
         background: var(--cer-surface);
-        font-size: 10px;
-        font-weight: 650;
+        box-shadow: 1px 0 0 var(--cer-border-strong);
+        font-size: 12px;
+        font-weight: 750;
         inset-inline-start: 0;
-        min-width: 112px;
+        min-width: 150px;
         position: sticky;
         white-space: nowrap;
         z-index: 1;
       }
-      [${TABLE_ATTR}] td { min-width: 74px; }
-      .codex-efficiency-score-pair { display: grid; gap: 3px; }
+      [${TABLE_ATTR}] td { min-width: 92px; }
+      .codex-efficiency-score-pair { display: grid; gap: 6px; }
       .codex-efficiency-score {
         align-items: baseline;
         display: flex;
-        gap: 4px;
+        gap: 7px;
         justify-content: space-between;
-        line-height: 1.2;
+        line-height: 1.35;
         white-space: nowrap;
       }
-      .codex-efficiency-score span { font-size: 8px; opacity: .58; }
-      .codex-efficiency-score strong { font-size: 11px; font-variant-numeric: tabular-nums; }
-      .codex-efficiency-score-software { opacity: .72; }
-      .codex-efficiency-empty { opacity: .42; text-align: center; }
+      .codex-efficiency-score span {
+        background: color-mix(in srgb, currentColor 10%, transparent);
+        border: 1px solid var(--cer-border);
+        border-radius: 5px;
+        font-size: 10px;
+        font-weight: 750;
+        min-width: 34px;
+        opacity: .92;
+        padding: 2px 4px;
+        text-align: center;
+      }
+      .codex-efficiency-score strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+      .codex-efficiency-score-software { opacity: .82; }
+      .codex-efficiency-empty { font-size: 13px; opacity: .58; text-align: center; }
       .codex-efficiency-panel-footer {
         align-items: center;
         border-block-start: 1px solid var(--cer-border);
@@ -204,15 +225,15 @@ function installEfficiencyOverlay(nextSnapshot) {
         flex-wrap: wrap;
         gap: 6px 8px;
         justify-content: space-between;
-        padding: 8px;
+        padding: 10px 12px;
       }
       [${STATUS_ATTR}] {
         align-items: center;
         display: inline-flex;
         flex: 1 1 130px;
-        font-size: 9px;
-        gap: 5px;
-        line-height: 1.35;
+        font-size: 10px;
+        gap: 6px;
+        line-height: 1.45;
         min-width: 0;
         opacity: .68;
       }
@@ -221,9 +242,9 @@ function installEfficiencyOverlay(nextSnapshot) {
         border-radius: 999px;
         content: "";
         flex: 0 0 auto;
-        height: 5px;
-        opacity: .55;
-        width: 5px;
+        height: 6px;
+        opacity: .72;
+        width: 6px;
       }
       [${ROOT_ATTR}][data-state="stale"] [${STATUS_ATTR}],
       [${ROOT_ATTR}][data-state="error"] [${STATUS_ATTR}] { opacity: .92; }
@@ -231,14 +252,15 @@ function installEfficiencyOverlay(nextSnapshot) {
         appearance: none;
         background: transparent;
         border: 1px solid var(--cer-border-strong);
-        border-radius: 7px;
+        border-radius: 8px;
         color: inherit;
         cursor: pointer;
         flex: 0 0 auto;
         font: inherit;
-        font-size: 10px;
-        min-height: 30px;
-        padding: 5px 9px;
+        font-size: 11px;
+        font-weight: 700;
+        min-height: 36px;
+        padding: 7px 12px;
       }
       [${REFRESH_ATTR}]:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
       [${REFRESH_ATTR}]:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
@@ -259,6 +281,11 @@ function installEfficiencyOverlay(nextSnapshot) {
     }
     for (const button of document.querySelectorAll(`[${REFRESH_ATTR}]`)) {
       if (!button.closest(`[${ROOT_ATTR}]`)) button.remove();
+    }
+    for (const surface of document.querySelectorAll(`[${SURFACE_EXPANDED_ATTR}]`)) {
+      const hasOpenPanel = [...surface.querySelectorAll(`[${PANEL_ATTR}]`)]
+        .some((panel) => !panel.hidden);
+      if (!hasOpenPanel) surface.removeAttribute(SURFACE_EXPANDED_ATTR);
     }
   };
   const directMenuItems = (menu) =>
@@ -398,8 +425,8 @@ function installEfficiencyOverlay(nextSnapshot) {
         } else {
           const pair = document.createElement("span");
           pair.className = "codex-efficiency-score-pair";
-          if (comprehensive != null) pair.append(metricNode("comprehensive", "综", comprehensive));
-          if (software != null) pair.append(metricNode("software", "工", software));
+          if (comprehensive != null) pair.append(metricNode("comprehensive", "综合", comprehensive));
+          if (software != null) pair.append(metricNode("software", "工程", software));
           cell.append(pair);
           const details = [];
           const softwareSamples = safeCount(effort?.softwareSamples);
@@ -411,7 +438,7 @@ function installEfficiencyOverlay(nextSnapshot) {
           if (details.length) cell.title = details.join("，");
           cell.setAttribute(
             "aria-label",
-            `${modelName.textContent}，${column.label}，综合 ${comprehensive ?? "无"}，软件工程 ${software ?? "无"}`
+            `${modelName.textContent}，${column.label}，综合智能 ${comprehensive ?? "无"}，软件工程 ${software ?? "无"}`
           );
         }
         row.append(cell);
@@ -474,9 +501,9 @@ function installEfficiencyOverlay(nextSnapshot) {
     const heading = document.createElement("div");
     heading.className = "codex-efficiency-panel-heading";
     const title = document.createElement("strong");
-    title.textContent = "模型 × 推理强度";
+    title.textContent = "效率值矩阵 · 模型 × 推理强度";
     const legend = document.createElement("span");
-    legend.textContent = "综 综合智能 · 工 软件工程";
+    legend.textContent = "综合智能 / 软件工程";
     heading.append(title, legend);
     return heading;
   };
@@ -503,6 +530,14 @@ function installEfficiencyOverlay(nextSnapshot) {
     if (!panel || !entry || !refresh || !status) return;
 
     entry.setAttribute("aria-expanded", String(!panel.hidden));
+    root.dataset.expanded = String(!panel.hidden);
+    const surface = root.closest('[role="menu"]');
+    if (surface) {
+      const hasOpenPanel = [...surface.querySelectorAll(`[${PANEL_ATTR}]`)]
+        .some((candidate) => !candidate.hidden);
+      if (hasOpenPanel) surface.setAttribute(SURFACE_EXPANDED_ATTR, "true");
+      else surface.removeAttribute(SURFACE_EXPANDED_ATTR);
+    }
     setText(summary, `${state.snapshot.models.length} 个模型`);
     if (state.refreshing) refresh.setAttribute("disabled", "");
     else refresh.removeAttribute("disabled");
