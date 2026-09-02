@@ -1,6 +1,6 @@
 {
   "name": "@codex-efficiency-radar/windows-overlay",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "description": "Optional Windows and macOS runtime overlay for the Codex model selector.",

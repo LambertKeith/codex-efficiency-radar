@@ -13,6 +13,7 @@ import {
   preflightWindowsPackagedAppActivation
 } from "./package-locator.mjs";
 import { createRadarProvider } from "./radar-provider.mjs";
+import { INJECTOR_DEFERRED_EXIT_CODE } from "./runtime-policy.mjs";
 
 function failFast(reason) {
   const message = reason instanceof Error ? reason.message : String(reason);
@@ -88,7 +89,8 @@ if (flags.has("--diagnose")) {
 
 if (!flags.has("--attach") && !(await endpointReady())) {
   if (await isCodexMainProcessRunning(installation.executablePath)) {
-    throw new Error("Codex 已在运行。请完全退出当前客户端，再按效率模式重新启动。");
+    log("Codex 已先行启动；交由常驻监视器重新评估该进程。");
+    process.exit(INJECTOR_DEFERRED_EXIT_CODE);
   }
   log("正在通过受控调试端口启动官方 Codex 客户端…");
   const debugArguments = [

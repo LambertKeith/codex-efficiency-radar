@@ -1,6 +1,6 @@
 {
   "name": "codex-efficiency-radar-repository",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "description": "Codex Efficiency Radar plugin and optional Windows/macOS selector overlay.",
   "scripts": {

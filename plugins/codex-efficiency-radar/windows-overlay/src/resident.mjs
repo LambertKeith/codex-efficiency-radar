@@ -16,6 +16,7 @@ import {
 } from "./package-locator.mjs";
 import {
   circuitBreakerState,
+  injectorDeferred,
   injectorFailed,
   injectorFailureReason
 } from "./runtime-policy.mjs";
@@ -214,6 +215,10 @@ async function main() {
           await assertLoopbackPortAvailable(config.devtoolsPort);
           await log("正在按效率模式启动 Codex。");
           const result = await runInjector(false);
+          if (injectorDeferred(result)) {
+            await log("普通 Codex 在增强启动前先行出现；返回监视循环处理。");
+            continue;
+          }
           if (injectorFailed(result)) {
             throw new Error(injectorFailureReason(result));
           }
@@ -274,6 +279,10 @@ async function main() {
       await waitForMainExit(installation.executablePath, running.processId);
       await log("正在按效率模式重新启动 Codex。");
       const result = await runInjector(false);
+      if (injectorDeferred(result)) {
+        await log("新的普通 Codex 在受控重启期间先行出现；返回监视循环处理。");
+        continue;
+      }
       if (injectorFailed(result)) {
         throw new Error(injectorFailureReason(result));
       }

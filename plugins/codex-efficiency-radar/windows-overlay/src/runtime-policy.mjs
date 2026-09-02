@@ -1,3 +1,13 @@
+export const INJECTOR_DEFERRED_EXIT_CODE = 3;
+
+export function injectorDeferred(result) {
+  return Boolean(
+    !result?.error &&
+    !result?.signal &&
+    result?.code === INJECTOR_DEFERRED_EXIT_CODE
+  );
+}
+
 export function injectorFailed(result) {
   return Boolean(result?.error || result?.signal || result?.code !== 0);
 }

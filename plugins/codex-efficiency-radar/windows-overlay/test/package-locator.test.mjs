@@ -11,6 +11,7 @@ import {
 } from "../src/package-locator.mjs";
 import {
   circuitBreakerState,
+  injectorDeferred,
   injectorFailed,
   injectorFailureReason
 } from "../src/runtime-policy.mjs";
@@ -43,6 +44,8 @@ const compatibility = {
 const reviewedCompatibility = JSON.parse(
   readFileSync(new URL("../compatibility.json", import.meta.url), "utf8")
 );
+const launcherSource = readFileSync(new URL("../src/launcher.mjs", import.meta.url), "utf8");
+const residentSource = readFileSync(new URL("../src/resident.mjs", import.meta.url), "utf8");
 
 test("当前 Windows Codex 构建使用完整身份和哈希精确放行", () => {
   const currentInstallation = {
@@ -159,6 +162,18 @@ test("注入器非零退出或信号都会触发安全熔断判定", () => {
   assert.equal(injectorFailed({ code: null, signal: null, error: new Error("spawn EPERM") }), true);
   assert.equal(injectorFailureReason({ code: 1 }), "注入器退出码 1");
   assert.equal(injectorFailureReason({ signal: "SIGTERM" }), "注入器被信号 SIGTERM 终止");
+});
+
+test("普通 Codex 抢先启动使用专用延后结果且不掩盖其他失败", () => {
+  assert.equal(injectorDeferred({ code: 3, signal: null, error: null }), true);
+  assert.equal(injectorDeferred({ code: 1, signal: null, error: null }), false);
+  assert.equal(injectorDeferred({ code: 3, signal: "SIGTERM", error: null }), false);
+  assert.equal(injectorDeferred({ code: 3, signal: null, error: new Error("spawn EPERM") }), false);
+});
+
+test("启动器和 Resident 两端均接入抢先启动延后协议", () => {
+  assert.match(launcherSource, /process\.exit\(INJECTOR_DEFERRED_EXIT_CODE\)/);
+  assert.equal(residentSource.match(/if \(injectorDeferred\(result\)\)/g)?.length, 2);
 });
 
 test("熔断状态记录失败阶段并保持可诊断时间", () => {
