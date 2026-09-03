@@ -31,10 +31,22 @@ sign-in so the process and runtime remain visible outside the Codex process tree
 
 The overlay refuses to run unless the platform, architecture, package or bundle
 version, app version, executable version, and `app.asar` SHA-256 all match a
-reviewed entry in
-`windows-overlay/compatibility.json`. After a Codex update, the MCP plugin keeps
-working while the selector overlay remains disabled until a new build is
-reviewed.
+reviewed entry. Built-in entries live in `windows-overlay/compatibility.json`.
+After a Codex update, the resident stays alive but leaves the running standard
+Codex process untouched while it periodically checks the repository's fixed
+`raw.githubusercontent.com` HTTPS manifest URL. The downloaded manifest is data
+only: it may add exact reviewed identities and select one of the selector
+contracts already implemented by the installed runtime. It cannot download or
+replace executable JavaScript, use an unknown selector contract, change the
+official Windows AppUserModelID, or change the official macOS bundle and Team ID.
+Invalid manifests, redirects to another URL, oversized responses, network errors,
+and non-matching hashes are ignored. The last valid manifest is cached locally so
+offline starts keep the same reviewed boundary.
+
+When a matching reviewed entry appears, the resident waits for the currently
+running unenhanced Codex process to exit before restoring enhanced launch. If a
+client update changes the selector beyond the installed contracts, a new plugin
+release is still required; the runtime does not infer or auto-approve unknown DOM.
 
 On macOS the check also requires the official `com.openai.codex` bundle identifier
 and OpenAI Team ID. Only install the overlay on a trusted local account. Other local

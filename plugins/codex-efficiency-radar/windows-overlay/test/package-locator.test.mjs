@@ -52,10 +52,10 @@ test("当前 Windows Codex 构建使用完整身份和哈希精确放行", () =>
     platform: "win32",
     arch: "x64",
     appUserModelId: "OpenAI.Codex_2p2nqsd0c76g0!App",
-    packageVersion: "26.831.2377.0",
-    appVersion: "26.831.21537",
+    packageVersion: "26.901.1978.0",
+    appVersion: "26.901.20858",
     executableVersion: "152.0.7977.64",
-    asarSha256: "37E442E444194CEBFF47EB190B2C0CCD99332498A361545BBF823C49CCF11CD3"
+    asarSha256: "09C7EF96B5D524FEF9B76270DE216CF6D661FFAD4727680A9B9631D18795183D"
   };
   assert.equal(
     matchCompatibility(currentInstallation, reviewedCompatibility)?.selectorContract,
@@ -65,7 +65,7 @@ test("当前 Windows Codex 构建使用完整身份和哈希精确放行", () =>
     matchCompatibility(
       {
         ...currentInstallation,
-        asarSha256: "37E442E444194CEBFF47EB190B2C0CCD99332498A361545BBF823C49CCF11CD2"
+        asarSha256: "09C7EF96B5D524FEF9B76270DE216CF6D661FFAD4727680A9B9631D18795183C"
       },
       reviewedCompatibility
     ),
@@ -174,6 +174,22 @@ test("普通 Codex 抢先启动使用专用延后结果且不掩盖其他失败"
 test("启动器和 Resident 两端均接入抢先启动延后协议", () => {
   assert.match(launcherSource, /process\.exit\(INJECTOR_DEFERRED_EXIT_CODE\)/);
   assert.equal(residentSource.match(/if \(injectorDeferred\(result\)\)/g)?.length, 2);
+});
+
+test("Resident 遇到客户端更新时保持驻留并等待审核清单", () => {
+  assert.match(residentSource, /createCompatibilityRefresher/);
+  assert.match(residentSource, /getCodexPackageStamp/);
+  assert.match(residentSource, /保持原生选择器并自动同步审核清单/);
+  assert.match(residentSource, /等待当前原生进程退出后自动恢复增强/);
+  assert.match(residentSource, /当前 Codex 构建已进入审核清单/);
+  assert.match(residentSource, /unreviewedProcessId/);
+  assert.match(residentSource, /当前原生 Codex 已退出，准备自动恢复增强模式/);
+  assert.doesNotMatch(
+    residentSource,
+    /检测到未审核的客户端更新，自动模式已关闭[\s\S]{0,160}lock\.close\(\)/
+  );
+  assert.match(residentSource, /changedDuringInjector/);
+  assert.match(residentSource, /跳过熔断并等待新的审核条目/);
 });
 
 test("熔断状态记录失败阶段并保持可诊断时间", () => {

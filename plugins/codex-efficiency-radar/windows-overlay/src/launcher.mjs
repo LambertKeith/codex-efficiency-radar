@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CdpClient } from "./cdp-client.mjs";
+import { loadCompatibilityDocument } from "./compatibility-update.mjs";
 import { buildInjectionSource } from "./injection-script.mjs";
 import {
   activateWindowsPackagedApp,
@@ -26,7 +27,7 @@ process.on("unhandledRejection", failFast);
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const config = JSON.parse(await readFile(path.join(projectRoot, "config.json"), "utf8"));
-const compatibility = JSON.parse(await readFile(path.join(projectRoot, "compatibility.json"), "utf8"));
+const compatibility = await loadCompatibilityDocument(projectRoot);
 const radarClientPath = path.resolve(projectRoot, config.radarClientPath);
 const flags = new Set(process.argv.slice(2));
 const endpoint = `http://127.0.0.1:${config.devtoolsPort}`;

@@ -13,6 +13,7 @@ const required = [
   "plugins/codex-efficiency-radar/.mcp.json",
   "plugins/codex-efficiency-radar/dist/server.mjs",
   "plugins/codex-efficiency-radar/windows-overlay/compatibility.json",
+  "plugins/codex-efficiency-radar/windows-overlay/src/compatibility-update.mjs",
   "plugins/codex-efficiency-radar/scripts/install-selector-overlay.mjs",
   "plugins/codex-efficiency-radar/scripts/uninstall-selector-overlay.mjs"
 ];

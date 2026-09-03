@@ -7,5 +7,13 @@
   "devtoolsPort": 9333,
   "radarClientPath": "../src/radar-client.mjs",
   "targetPollMs": 1000,
-  "startupTimeoutMs": 30000
+  "startupTimeoutMs": 30000,
+  "packagePollMs": 300000,
+  "compatibilityRetryMs": 5000,
+  "compatibilityUpdate": {
+    "enabled": true,
+    "manifestUrl": "https://raw.githubusercontent.com/LambertKeith/codex-efficiency-radar/main/plugins/codex-efficiency-radar/windows-overlay/compatibility.json",
+    "intervalMs": 900000,
+    "timeoutMs": 10000
+  }
 }

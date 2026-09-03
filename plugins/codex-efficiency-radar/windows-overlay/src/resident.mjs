@@ -8,12 +8,17 @@ import { fileURLToPath } from "node:url";
 import {
   activateWindowsPackagedApp,
   findCodexMainProcess,
+  getCodexPackageStamp,
   locateCodexPackage,
   matchCompatibility,
   preflightWindowsPackagedAppActivation,
   restoreWindowsPackagedApp,
   terminateCodexMainProcess
 } from "./package-locator.mjs";
+import {
+  createCompatibilityRefresher,
+  loadCompatibilityDocument
+} from "./compatibility-update.mjs";
 import {
   circuitBreakerState,
   injectorDeferred,
@@ -152,6 +157,26 @@ async function restoreStandardCodex(installation) {
   await log("已请求 macOS 恢复标准 Codex 启动。");
 }
 
+function installationIdentity(installation) {
+  if (!installation) return "";
+  return [
+    installation.platform,
+    installation.arch,
+    installation.packageVersion,
+    installation.appVersion,
+    installation.executableVersion,
+    installation.appUserModelId,
+    installation.bundleIdentifier,
+    installation.teamIdentifier,
+    installation.asarSha256
+  ].join("|");
+}
+
+function positiveSetting(value, fallback, minimum = 250) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(minimum, number) : fallback;
+}
+
 async function main() {
   if (await readFile(disabledPath, "utf8").then(() => true, () => false)) {
     await log("检测到安全熔断状态；重新安装选择器增强前不会拦截 Codex。");
@@ -159,9 +184,13 @@ async function main() {
   }
 
   const config = JSON.parse(await readFile(path.join(projectRoot, "config.json"), "utf8"));
-  const compatibility = JSON.parse(
-    await readFile(path.join(projectRoot, "compatibility.json"), "utf8")
-  );
+  let compatibility = await loadCompatibilityDocument(projectRoot);
+  const compatibilityRefresher = createCompatibilityRefresher({
+    projectRoot,
+    settings: config.compatibilityUpdate
+  });
+  const packagePollMs = positiveSetting(config.packagePollMs, 300000);
+  const compatibilityRetryMs = positiveSetting(config.compatibilityRetryMs, 5000, 1000);
 
   let lock;
   try {
@@ -171,20 +200,138 @@ async function main() {
     throw error;
   }
 
-  let installation = await locateCodexPackage(config.packageName, {
-    appPaths: config.macAppPaths
-  });
-  if (!matchCompatibility(installation, compatibility)) {
-    await log(
-      `客户端版本未审核，自动模式保持关闭：${installation.packageVersion} / ${installation.appVersion}`
-    );
-    lock.close();
-    return;
+  const ignoredProcessId = await readIgnoredProcessId();
+  let ignoredStillRunning = ignoredProcessId != null;
+  let pendingEnhancedLaunch = false;
+  let installation = null;
+  let target = null;
+  let packageStamp = "";
+  let nextPackageCheckAt = 0;
+  let lastUnsupportedIdentity = "";
+  let unreviewedProcessId = null;
+  let lastPackageError = "";
+  let preflightIdentity = "";
+  await log(`常驻监视器已启动；忽略当前进程：${ignoredProcessId ?? "无"}`);
+
+  async function refreshCompatibility(force) {
+    const result = await compatibilityRefresher({ force });
+    if (result.document) compatibility = result.document;
+    if (result.status === "updated") {
+      await log("已自动同步官方兼容清单；重新评估当前 Codex 客户端。");
+    } else if (result.status === "failed" && result.error) {
+      await log(`兼容清单自动同步失败：${result.error.message}`);
+    }
+    return result;
   }
 
-  if (installation.platform === "win32") {
+  async function resolveCurrentInstallation(force = false) {
+    if (!force && installation && Date.now() < nextPackageCheckAt) {
+      target = matchCompatibility(installation, compatibility);
+      return { installation, target, error: null };
+    }
+
     try {
-      await preflightWindowsPackagedAppActivation(installation.appUserModelId);
+      const nextStamp = await getCodexPackageStamp(config.packageName, {
+        appPaths: config.macAppPaths
+      });
+      const packageChanged = nextStamp !== packageStamp;
+      const previousIdentity = installationIdentity(installation);
+      if (force || !installation || packageChanged) {
+        installation = await locateCodexPackage(config.packageName, {
+          appPaths: config.macAppPaths
+        });
+        packageStamp = nextStamp;
+      }
+      const nextIdentity = installationIdentity(installation);
+      const changed = nextIdentity !== previousIdentity;
+      nextPackageCheckAt = Date.now() + packagePollMs;
+      target = matchCompatibility(installation, compatibility);
+
+      if (changed && previousIdentity && target) {
+        const updatedProcess = await findCodexMainProcess(installation.executablePath).catch(() => null);
+        const debugFlag = `--remote-debugging-port=${config.devtoolsPort}`;
+        if (updatedProcess && !updatedProcess.commandLine.includes(debugFlag)) {
+          unreviewedProcessId = updatedProcess.processId;
+          await log("检测到已审核的 Codex 更新；等待当前原生进程退出后自动恢复增强。");
+        }
+      }
+
+      if (!target) {
+        const firstObservation = changed || nextIdentity !== lastUnsupportedIdentity;
+        if (firstObservation) {
+          lastUnsupportedIdentity = nextIdentity;
+          await log(
+            `检测到尚未审核的 Codex 构建：${installation.packageVersion} / ${installation.appVersion}；` +
+            "保持原生选择器并自动同步审核清单。"
+          );
+        }
+        await refreshCompatibility(firstObservation);
+        target = matchCompatibility(installation, compatibility);
+        if (target) {
+          const unreviewed = await findCodexMainProcess(installation.executablePath).catch(() => null);
+          unreviewedProcessId = unreviewed?.processId ?? null;
+          lastUnsupportedIdentity = "";
+          await log("当前 Codex 构建已进入审核清单，准备自动恢复选择器增强。");
+        }
+      } else if (lastUnsupportedIdentity === nextIdentity) {
+        lastUnsupportedIdentity = "";
+        await log("当前 Codex 构建已确认，恢复选择器增强监视。");
+      }
+      lastPackageError = "";
+      return { installation, target, error: null };
+    } catch (error) {
+      nextPackageCheckAt = Date.now() + packagePollMs;
+      target = null;
+      const message = error?.message || String(error);
+      if (message !== lastPackageError) {
+        lastPackageError = message;
+        await log(`读取 Codex 安装信息失败，将自动重试：${message}`);
+      }
+      return { installation: null, target: null, error };
+    }
+  }
+
+  async function ensureWindowsPreflight() {
+    if (!installation || installation.platform !== "win32") return;
+    const identity = installationIdentity(installation);
+    if (preflightIdentity === identity) return;
+    await preflightWindowsPackagedAppActivation(installation.appUserModelId);
+    preflightIdentity = identity;
+  }
+
+  async function changedDuringInjector(previousIdentity) {
+    const latest = await resolveCurrentInstallation(true);
+    if (latest.error || !latest.installation) {
+      await log("注入结束后暂时无法读取客户端身份，跳过熔断并等待重试。");
+      return true;
+    }
+    if (installationIdentity(latest.installation) === previousIdentity) return false;
+    await log("注入期间检测到 Codex 已更新，跳过熔断并等待新的审核条目。");
+    await restoreStandardCodex(latest.installation).catch(async (error) => {
+      await log(`恢复更新后的标准 Codex 失败：${error.message}`);
+    });
+    return true;
+  }
+
+  while (lock.listening) {
+    const current = await resolveCurrentInstallation();
+    if (current.error || !current.installation) {
+      await sleep(packagePollMs);
+      continue;
+    }
+    if (!current.target) {
+      try {
+        const unreviewed = await findCodexMainProcess(current.installation.executablePath);
+        unreviewedProcessId = unreviewed?.processId ?? null;
+      } catch (error) {
+        await log(`读取未审核 Codex 进程失败，将自动重试：${error.message}`);
+      }
+      await sleep(compatibilityRetryMs);
+      continue;
+    }
+
+    try {
+      await ensureWindowsPreflight();
     } catch (error) {
       await tripCircuitBreaker(`Windows 打包应用激活预检失败：${error.message}`);
       await restoreStandardCodex(installation).catch(async (restoreError) => {
@@ -193,16 +340,21 @@ async function main() {
       lock.close();
       return;
     }
-  }
 
-  const ignoredProcessId = await readIgnoredProcessId();
-  let ignoredStillRunning = ignoredProcessId != null;
-  let pendingEnhancedLaunch = false;
-  await log(`常驻监视器已启动；忽略当前进程：${ignoredProcessId ?? "无"}`);
-
-  while (lock.listening) {
-    const running = await findCodexMainProcess(installation.executablePath);
+    let running;
+    try {
+      running = await findCodexMainProcess(installation.executablePath);
+    } catch (error) {
+      await log(`读取 Codex 进程失败，将自动重试：${error.message}`);
+      await sleep(packagePollMs);
+      continue;
+    }
     if (!running) {
+      if (unreviewedProcessId != null) {
+        unreviewedProcessId = null;
+        pendingEnhancedLaunch = true;
+        await log("审核清单已就绪；当前原生 Codex 已退出，准备自动恢复增强模式。");
+      }
       if (ignoredStillRunning) {
         ignoredStillRunning = false;
         pendingEnhancedLaunch = true;
@@ -220,6 +372,7 @@ async function main() {
             continue;
           }
           if (injectorFailed(result)) {
+            if (await changedDuringInjector(installationIdentity(installation))) continue;
             throw new Error(injectorFailureReason(result));
           }
         } catch (error) {
@@ -242,22 +395,18 @@ async function main() {
       continue;
     }
 
-    installation = await locateCodexPackage(config.packageName, {
-      appPaths: config.macAppPaths
-    });
-    if (!matchCompatibility(installation, compatibility)) {
-      await log(
-        `检测到未审核的客户端更新，自动模式已关闭：${installation.packageVersion} / ${installation.appVersion}`
-      );
-      lock.close();
-      return;
+    if (unreviewedProcessId != null && running.processId === unreviewedProcessId) {
+      await sleep(400);
+      continue;
     }
+    unreviewedProcessId = null;
 
     const debugFlag = `--remote-debugging-port=${config.devtoolsPort}`;
     if (running.commandLine.includes(debugFlag)) {
       await log(`连接效率模式进程：${running.processId}`);
       const result = await runInjector(true);
       if (injectorFailed(result)) {
+        if (await changedDuringInjector(installationIdentity(installation))) continue;
         await tripCircuitBreaker(injectorFailureReason(result), {
           phase: "attach",
           exitCode: result.code,
@@ -273,6 +422,7 @@ async function main() {
     }
 
     try {
+      const previousIdentity = installationIdentity(installation);
       await verifyRestartPrerequisites(installation, config.devtoolsPort);
       await log(`拦截普通 Codex 进程：${running.processId}`);
       await terminateCodexMainProcess(running.processId);
@@ -284,6 +434,7 @@ async function main() {
         continue;
       }
       if (injectorFailed(result)) {
+        if (await changedDuringInjector(previousIdentity)) continue;
         throw new Error(injectorFailureReason(result));
       }
     } catch (error) {

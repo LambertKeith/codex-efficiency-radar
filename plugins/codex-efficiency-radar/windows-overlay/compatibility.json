@@ -29,6 +29,15 @@
       "selectorContract": "data-model-picker-view-v2"
     },
     {
+      "platform": "win32",
+      "appUserModelId": "OpenAI.Codex_2p2nqsd0c76g0!App",
+      "packageVersion": "26.901.1978.0",
+      "appVersion": "26.901.20858",
+      "executableVersion": "152.0.7977.64",
+      "asarSha256": "09C7EF96B5D524FEF9B76270DE216CF6D661FFAD4727680A9B9631D18795183D",
+      "selectorContract": "data-model-picker-view-v2"
+    },
+    {
       "platform": "darwin",
       "arch": "arm64",
       "packageVersion": "7377",

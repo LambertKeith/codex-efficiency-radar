@@ -14,6 +14,7 @@ test("Windows installer uses an externally visible runtime and a current-user ta
   assert.match(installer, /New-ScheduledTaskPrincipal.*-LogonType\s+Interactive/);
   assert.match(installer, /Register-ScheduledTask\s+-TaskName\s+\$taskName/);
   assert.match(installer, /Start-ScheduledTask\s+-TaskName\s+\$taskName/);
+  assert.match(installer, /Copy-Item.*sourceFile/);
   assert.doesNotMatch(installer, /Invoke-CimMethod\s+-ClassName\s+Win32_Process/);
   assert.doesNotMatch(installer, /Start-Process\s+-FilePath\s+\$powerShellPath/);
 });
@@ -25,4 +26,5 @@ test("macOS installer checks the platform before reading the Unix user id", asyn
     installer,
     /process\.platform === "darwin" \? `gui\/\$\{process\.getuid\(\)\}` : null/
   );
+  assert.match(installer, /readdir\(path\.join\(sourceOverlayRoot, "src"\)/);
 });

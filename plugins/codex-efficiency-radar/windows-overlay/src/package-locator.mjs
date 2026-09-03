@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -15,7 +15,7 @@ async function sha256(filePath) {
   return hash.digest("hex").toUpperCase();
 }
 
-async function locateWindowsPackage(packageName) {
+async function readWindowsPackageMetadata(packageName) {
   const script = [
     `$package = Get-AppxPackage -Name '${packageName.replaceAll("'", "''")}'`,
     `if ($null -eq $package) { exit 4 }`,
@@ -38,7 +38,11 @@ async function locateWindowsPackage(packageName) {
     ["-NoProfile", "-NonInteractive", "-Command", script],
     { windowsHide: true, maxBuffer: 1024 * 1024 }
   );
-  const metadata = JSON.parse(stdout.trim());
+  return JSON.parse(stdout.trim());
+}
+
+async function locateWindowsPackage(packageName) {
+  const metadata = await readWindowsPackageMetadata(packageName);
   const executablePath = path.join(metadata.InstallLocation, "app", "ChatGPT.exe");
   const asarPath = path.join(metadata.InstallLocation, "app", "resources", "app.asar");
   const owlAppPath = path.join(metadata.InstallLocation, "app", "resources", "owl-app.ini");
@@ -150,6 +154,33 @@ async function locateMacPackage(appPaths = []) {
     asarPath,
     asarSha256: await sha256(asarPath)
   };
+}
+
+async function readMacPackageStamp(appPaths = []) {
+  const appBundlePath = await firstAccessible([
+    process.env.CODEX_APP_PATH,
+    ...appPaths,
+    "/Applications/ChatGPT.app",
+    "/Applications/Codex.app",
+    path.join(os.homedir(), "Applications", "ChatGPT.app"),
+    path.join(os.homedir(), "Applications", "Codex.app")
+  ]);
+  if (!appBundlePath) {
+    throw new Error("未找到 Codex macOS 应用。可通过 CODEX_APP_PATH 指定 .app 路径。");
+  }
+  const info = await stat(path.join(appBundlePath, "Contents", "Info.plist"));
+  const asar = await stat(path.join(appBundlePath, "Contents", "Resources", "app.asar"));
+  return ["darwin", process.arch, appBundlePath, info.size, info.mtimeMs, asar.size, asar.mtimeMs]
+    .join("|");
+}
+
+export async function getCodexPackageStamp(packageName, options = {}) {
+  if (process.platform === "win32") {
+    const metadata = await readWindowsPackageMetadata(packageName);
+    return ["win32", process.arch, metadata.Version, metadata.InstallLocation].join("|");
+  }
+  if (process.platform === "darwin") return readMacPackageStamp(options.appPaths);
+  throw new Error(`当前平台 ${process.platform} 没有受支持的 Codex 桌面选择器增强。`);
 }
 
 export async function locateCodexPackage(packageName, options = {}) {
