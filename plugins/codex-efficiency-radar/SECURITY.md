@@ -3,7 +3,7 @@
 The MCP plugin is read-only. It fetches public community benchmark data from
 `https://codexradar.com` and keeps the last successful snapshot in memory.
 
-The optional Windows/macOS selector overlay is experimental and is not an official
+The required Windows/macOS selector overlay is experimental and is not an official
 OpenAI extension point. It launches the signed Microsoft Store Codex executable
 or the signed and notarized macOS Codex app with a Chrome DevTools Protocol
 endpoint bound to `127.0.0.1`, then injects UI
@@ -28,6 +28,12 @@ The Windows runtime is stored below the current user's `.codex` directory rather
 than `%LOCALAPPDATA%`, whose contents may be virtualized for packaged Codex
 processes. A current-user, limited-run-level scheduled task starts the resident at
 sign-in so the process and runtime remain visible outside the Codex process tree.
+
+This project's installer reports success only when the regular plugin is enabled,
+Codex is running in enhanced mode, and an end-to-end CDP check has opened the real
+model selector and confirmed the Efficiency entry plus loaded numeric score pairs.
+An armed resident, a pending restart, or an open debugging port alone is never
+reported as installation success.
 
 The overlay refuses to run unless the platform, architecture, package or bundle
 version, app version, executable version, and `app.asar` SHA-256 all match a

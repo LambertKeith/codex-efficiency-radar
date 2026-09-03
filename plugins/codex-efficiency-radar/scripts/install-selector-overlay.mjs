@@ -1,14 +1,10 @@
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-
-import {
-  findCodexMainProcess,
-  locateCodexPackage
-} from "../windows-overlay/src/package-locator.mjs";
 
 const execFileAsync = promisify(execFile);
 const pluginRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -46,13 +42,6 @@ async function bootoutExistingAgent() {
 if (process.platform !== "darwin") {
   throw new Error("此安装器仅用于 macOS；Windows 请使用 install-selector-overlay.ps1。");
 }
-
-const config = JSON.parse(
-  await readFile(path.join(sourceOverlayRoot, "config.json"), "utf8")
-);
-const installation = await locateCodexPackage(config.packageName, {
-  appPaths: config.macAppPaths
-});
 
 console.log("[1/4] 校验 macOS Codex 构建与选择器兼容白名单…");
 try {
@@ -94,10 +83,19 @@ try {
     path.join(runtimeRoot, "src", "radar-client.mjs")
   );
 
-  const running = await findCodexMainProcess(installation.executablePath);
-  if (running) {
-    await writeFile(path.join(stateDir, "ignore-once.pid"), String(running.processId), "ascii");
-  }
+  const attempt = {
+    attemptId: randomUUID(),
+    version: JSON.parse(
+      await readFile(path.join(sourceOverlayRoot, "package.json"), "utf8")
+    ).version,
+    requestedAt: new Date().toISOString()
+  };
+  await writeFile(
+    path.join(stateDir, "install-attempt.json"),
+    `${JSON.stringify(attempt, null, 2)}\n`,
+    "utf8"
+  );
+  await writeFile(path.join(stateDir, "activate-now.request"), "install\n", "utf8");
 
   console.log("[3/4] 创建当前用户 LaunchAgent…");
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
@@ -135,14 +133,24 @@ try {
   await execFileAsync("/bin/launchctl", ["bootstrap", launchDomain, launchAgentPath]);
 
   console.log("[4/4] 验证常驻服务…");
-  await execFileAsync(
-    "/bin/launchctl",
-    ["print", `${launchDomain}/${launchAgentLabel}`],
-    { maxBuffer: 1024 * 1024 }
-  );
-  console.log("macOS 选择器增强已安装。当前 Codex 不会被中断；下次完整退出并重开后生效。");
+  await execFileAsync(process.execPath, [
+    path.join(pluginRoot, "scripts", "verify-selector-overlay.mjs")
+  ]);
+  console.log("macOS 选择器增强完整安装成功：Codex 已进入增强模式，效率入口与数值已经过真实界面验证。");
 } catch (error) {
+  const diagnosticPath = "/tmp/codex-efficiency-radar-selector-failure.log";
+  const diagnosticParts = [`安装失败：${error?.stack || error?.message || error}`];
+  for (const fileName of ["resident.log", "launchd.log", "overlay-disabled.json"]) {
+    const content = await readFile(path.join(stateDir, fileName), "utf8").catch(() => "");
+    if (content.trim()) diagnosticParts.push(`\n--- ${fileName} ---\n${content.trim()}`);
+  }
+  await writeFile(diagnosticPath, `${diagnosticParts.join("\n")}\n`, "utf8").catch(() => {});
+  console.error(`选择器安装诊断已保留：${diagnosticPath}`);
   await bootoutExistingAgent();
+  await execFileAsync(process.execPath, [
+    path.join(sourceOverlayRoot, "src", "launcher.mjs"),
+    "--restore-standard"
+  ]).catch(() => {});
   await rm(launchAgentPath, { force: true });
   await rm(runtimeRoot, { recursive: true, force: true });
   throw error;

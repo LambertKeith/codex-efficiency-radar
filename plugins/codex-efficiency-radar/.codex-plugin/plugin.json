@@ -1,7 +1,7 @@
 {
   "name": "codex-efficiency-radar",
-  "version": "0.5.0",
-  "description": "Compare composite intelligence and software-engineering scores across Codex models and reasoning efforts.",
+  "version": "0.5.9",
+  "description": "Compare model efficiency scores with a required reviewed native selector runtime on Windows and macOS.",
   "author": {
     "name": "LambertKeith",
     "url": "https://github.com/LambertKeith"

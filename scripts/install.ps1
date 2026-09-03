@@ -1,14 +1,18 @@
 [CmdletBinding()]
-param(
-  [switch]$PluginOnly
-)
+param()
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pluginRoot = Join-Path $repoRoot 'plugins\codex-efficiency-radar'
 $bundlePath = Join-Path $pluginRoot 'dist\server.mjs'
+$overlayLauncher = Join-Path $pluginRoot 'windows-overlay\src\launcher.mjs'
 $marketplaceName = 'codex-efficiency-radar'
 $pluginName = 'codex-efficiency-radar'
+
+if ($args.Count -gt 0) {
+  Write-Error ('Unsupported installer arguments: {0}. The native selector overlay is required.' -f ($args -join ' '))
+  exit 64
+}
 
 function Require-Command([string]$Name) {
   $command = Get-Command $Name -ErrorAction SilentlyContinue
@@ -28,13 +32,16 @@ function Invoke-Checked([string]$FilePath, [string[]]$Arguments) {
 $node = Require-Command 'node.exe'
 $codex = Require-Command 'codex.exe'
 
-Write-Host '[1/4] Verifying the bundled MCP server...'
+Write-Host '[1/5] Verifying the bundled MCP server...'
 if (-not (Test-Path -LiteralPath $bundlePath)) {
   throw "Bundled MCP server is missing: $bundlePath"
 }
 Invoke-Checked $node @('--check', $bundlePath)
 
-Write-Host '[2/4] Registering the local Codex plugin marketplace...'
+Write-Host '[2/5] Preflighting the required native selector overlay...'
+Invoke-Checked $node @($overlayLauncher, '--diagnose')
+
+Write-Host '[3/5] Registering the local Codex plugin marketplace...'
 $marketplaces = (& $codex plugin marketplace list --json | ConvertFrom-Json).marketplaces
 $existingMarketplace = $marketplaces | Where-Object { $_.name -eq $marketplaceName } | Select-Object -First 1
 if ($null -eq $existingMarketplace) {
@@ -44,37 +51,56 @@ if ($null -eq $existingMarketplace) {
   $expectedRoot = [System.IO.Path]::GetFullPath($repoRoot).TrimEnd('\')
   if (-not $existingRoot.Equals($expectedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
     $source = $existingMarketplace.marketplaceSource.source
-    if ($source -match 'LambertKeith[/\\]codex-efficiency-radar(?:\.git)?$') {
-      Invoke-Checked $codex @('plugin', 'marketplace', 'upgrade', $marketplaceName)
-    } else {
+    $sameRepository = $source -match 'LambertKeith[/\\]codex-efficiency-radar(?:\.git)?$'
+    if (-not $sameRepository) {
+      try {
+        $cachedMarketplace = Get-Content -LiteralPath (
+          Join-Path $existingRoot '.agents\plugins\marketplace.json'
+        ) -Raw | ConvertFrom-Json
+        $cachedManifest = Get-Content -LiteralPath (
+          Join-Path $existingRoot "plugins\$pluginName\.codex-plugin\plugin.json"
+        ) -Raw | ConvertFrom-Json
+        $repository = ([string]$cachedManifest.repository).TrimEnd('/') -replace '\.git$', ''
+        $sameRepository = (
+          $cachedMarketplace.name -eq $marketplaceName -and
+          $cachedManifest.name -eq $pluginName -and
+          $repository.Equals(
+            'https://github.com/LambertKeith/codex-efficiency-radar',
+            [System.StringComparison]::OrdinalIgnoreCase
+          )
+        )
+      } catch {
+        $sameRepository = $false
+      }
+    }
+    if (-not $sameRepository) {
       throw "Marketplace '$marketplaceName' already points to another directory: $existingRoot"
     }
+    Invoke-Checked $codex @('plugin', 'marketplace', 'remove', $marketplaceName)
+    Invoke-Checked $codex @('plugin', 'marketplace', 'add', $repoRoot)
   }
 }
 
-Write-Host '[3/4] Installing the Codex plugin...'
+Write-Host '[4/5] Installing the regular Codex plugin...'
 Invoke-Checked $codex @('plugin', 'add', "$pluginName@$marketplaceName")
 
-if (-not $PluginOnly) {
-  Write-Host '[4/4] Enabling the optional Windows selector overlay...'
-  $overlayInstaller = Join-Path $pluginRoot 'scripts\install-selector-overlay.ps1'
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $overlayInstaller
-  if ($LASTEXITCODE -eq 2) {
-    Write-Warning 'The plugin is installed, but the selector overlay was skipped because this Codex version is not approved yet.'
-  } elseif ($LASTEXITCODE -ne 0) {
-    throw "Selector overlay installation failed with exit code $LASTEXITCODE"
-  }
-} else {
-  Write-Host '[4/4] Selector overlay skipped by request.'
+$expectedVersion = (Get-Content -LiteralPath (Join-Path $pluginRoot '.codex-plugin\plugin.json') -Raw | ConvertFrom-Json).version
+$installed = (& $codex plugin list --json | ConvertFrom-Json).installed | Where-Object {
+  $_.pluginId -eq "$pluginName@$marketplaceName"
+}
+if ($null -eq $installed -or -not $installed.installed -or -not $installed.enabled -or $installed.version -ne $expectedVersion) {
+  throw "Plugin installation verification failed. Expected enabled version $expectedVersion."
 }
 
-$installed = (& $codex plugin list --json | ConvertFrom-Json).installed | Where-Object {
-  $_.pluginId -eq "$pluginName@$marketplaceName" -and $_.installed
-}
-if ($null -eq $installed) {
-  throw 'Plugin installation could not be verified.'
+Write-Host '[5/5] Installing and verifying the required Windows selector overlay...'
+$overlayInstaller = Join-Path $pluginRoot 'scripts\install-selector-overlay.ps1'
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $overlayInstaller
+if ($LASTEXITCODE -ne 0) {
+  throw "Selector overlay installation failed with exit code $LASTEXITCODE"
 }
 
 Write-Host ''
-Write-Host 'Codex Efficiency Radar is installed.'
-Write-Host 'Restart the ChatGPT/Codex desktop app, then open Model > Reasoning effort.'
+Write-Host (
+  "Codex Efficiency Radar $expectedVersion is fully installed: plugin enabled, Codex is in enhanced mode, " +
+  'and the real model selector has verified Efficiency values.'
+)

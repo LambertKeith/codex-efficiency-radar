@@ -47,6 +47,17 @@
       "teamIdentifier": "2DC432GLL2",
       "asarSha256": "F56AC8D5254A10FC4A04E7417FA787D135C3BBCA49BAD7D668D4AE65833D40C7",
       "selectorContract": "data-codex-intelligence-trigger-v1"
+    },
+    {
+      "platform": "darwin",
+      "arch": "arm64",
+      "packageVersion": "7579",
+      "appVersion": "26.831.21537",
+      "executableVersion": "152.0.7977.64",
+      "bundleIdentifier": "com.openai.codex",
+      "teamIdentifier": "2DC432GLL2",
+      "asarSha256": "4DF5376DD69EC8FD1D99C7E590982D8A10B762116CEB1961C0E2ADDCC08B07FA",
+      "selectorContract": "data-model-picker-view-v2"
     }
   ]
 }

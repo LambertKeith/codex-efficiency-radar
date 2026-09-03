@@ -8,6 +8,12 @@
   "radarClientPath": "../src/radar-client.mjs",
   "targetPollMs": 1000,
   "startupTimeoutMs": 30000,
+  "targetRetryDelayMs": 5000,
+  "uiVerificationTimeoutMs": 30000,
+  "uiHealthPollMs": 5000,
+  "uiHealthMaxAgeMs": 15000,
+  "installVerificationTimeoutMs": 120000,
+  "installerTimeoutMs": 165000,
   "packagePollMs": 300000,
   "compatibilityRetryMs": 5000,
   "compatibilityUpdate": {

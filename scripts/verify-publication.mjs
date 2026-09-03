@@ -15,6 +15,10 @@ const required = [
   "plugins/codex-efficiency-radar/windows-overlay/compatibility.json",
   "plugins/codex-efficiency-radar/windows-overlay/src/compatibility-update.mjs",
   "plugins/codex-efficiency-radar/scripts/install-selector-overlay.mjs",
+  "plugins/codex-efficiency-radar/scripts/verify-selector-overlay.mjs",
+  "plugins/codex-efficiency-radar/windows-overlay/src/resident-health.mjs",
+  "plugins/codex-efficiency-radar/windows-overlay/src/selector-opener.mjs",
+  "plugins/codex-efficiency-radar/windows-overlay/src/ui-verification.mjs",
   "plugins/codex-efficiency-radar/scripts/uninstall-selector-overlay.mjs"
 ];
 const ignoredDirectories = new Set([".git", "node_modules", ".preview", "state"]);

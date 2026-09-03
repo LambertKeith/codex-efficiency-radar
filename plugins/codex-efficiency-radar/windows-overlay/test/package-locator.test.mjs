@@ -46,6 +46,10 @@ const reviewedCompatibility = JSON.parse(
 );
 const launcherSource = readFileSync(new URL("../src/launcher.mjs", import.meta.url), "utf8");
 const residentSource = readFileSync(new URL("../src/resident.mjs", import.meta.url), "utf8");
+const packageLocatorSource = readFileSync(
+  new URL("../src/package-locator.mjs", import.meta.url),
+  "utf8"
+);
 
 test("当前 Windows Codex 构建使用完整身份和哈希精确放行", () => {
   const currentInstallation = {
@@ -70,6 +74,37 @@ test("当前 Windows Codex 构建使用完整身份和哈希精确放行", () =>
       reviewedCompatibility
     ),
     null
+  );
+});
+
+test("当前 macOS Codex 构建使用签名身份与哈希精确放行", () => {
+  const currentInstallation = {
+    platform: "darwin",
+    arch: "arm64",
+    packageVersion: "7579",
+    appVersion: "26.831.21537",
+    executableVersion: "152.0.7977.64",
+    bundleIdentifier: "com.openai.codex",
+    teamIdentifier: "2DC432GLL2",
+    asarSha256: "4DF5376DD69EC8FD1D99C7E590982D8A10B762116CEB1961C0E2ADDCC08B07FA"
+  };
+  assert.equal(
+    matchCompatibility(currentInstallation, reviewedCompatibility)?.selectorContract,
+    "data-model-picker-view-v2"
+  );
+  assert.equal(
+    matchCompatibility(
+      { ...currentInstallation, teamIdentifier: "UNREVIEWED" },
+      reviewedCompatibility
+    ),
+    null
+  );
+});
+
+test("macOS 终止竞态把 ESRCH 视为主进程已经退出", () => {
+  assert.match(
+    packageLocatorSource,
+    /process\.kill\(processId, "SIGTERM"\);[\s\S]*error\?\.code !== "ESRCH"/
   );
 });
 

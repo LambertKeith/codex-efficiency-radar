@@ -1,12 +1,12 @@
 {
   "name": "codex-efficiency-radar-repository",
-  "version": "0.5.0",
+  "version": "0.5.9",
   "private": true,
-  "description": "Codex Efficiency Radar plugin and optional Windows/macOS selector overlay.",
+  "description": "Codex Efficiency Radar plugin with a required Windows/macOS selector overlay.",
   "scripts": {
     "build": "pnpm --filter codex-efficiency-radar run build",
     "test": "pnpm --filter codex-efficiency-radar run test && pnpm --filter @codex-efficiency-radar/windows-overlay run test",
-    "check:scripts": "node --check scripts/install.mjs && node --check scripts/uninstall.mjs && node --check plugins/codex-efficiency-radar/scripts/install-selector-overlay.mjs && node --check plugins/codex-efficiency-radar/scripts/uninstall-selector-overlay.mjs",
+    "check:scripts": "node --check scripts/install.mjs && node --check scripts/uninstall.mjs && node --check plugins/codex-efficiency-radar/scripts/install-selector-overlay.mjs && node --check plugins/codex-efficiency-radar/scripts/verify-selector-overlay.mjs && node --check plugins/codex-efficiency-radar/scripts/uninstall-selector-overlay.mjs",
     "check": "pnpm run build && pnpm run check:scripts && pnpm --filter codex-efficiency-radar run check:source && pnpm --filter @codex-efficiency-radar/windows-overlay run check && node scripts/verify-publication.mjs"
   },
   "engines": {

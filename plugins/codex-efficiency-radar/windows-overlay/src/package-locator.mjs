@@ -265,7 +265,12 @@ export async function terminateCodexMainProcess(processId) {
     );
     return;
   }
-  process.kill(processId, "SIGTERM");
+  try {
+    process.kill(processId, "SIGTERM");
+  } catch (error) {
+    if (error?.code !== "ESRCH") throw error;
+    // 进程在发现与终止之间已经退出，目标状态已经满足。
+  }
 }
 
 const WINDOWS_ACTIVATOR_SOURCE = String.raw`

@@ -25,13 +25,38 @@ import {
   injectorFailed,
   injectorFailureReason
 } from "./runtime-policy.mjs";
+import {
+  assertFullUiVerificationHistory,
+  createResidentHealth,
+  listenForResidentHealth
+} from "./resident-health.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const stateDir = path.join(projectRoot, "state");
 const logPath = path.join(stateDir, "resident.log");
 const ignorePath = path.join(stateDir, "ignore-once.pid");
 const disabledPath = path.join(stateDir, "overlay-disabled.json");
+const activationRequestPath = path.join(stateDir, "activate-now.request");
+const installAttemptPath = path.join(stateDir, "install-attempt.json");
+const uiReadyPath = path.join(stateDir, "ui-ready.json");
 mkdirSync(stateDir, { recursive: true });
+
+let residentHealth = createResidentHealth({
+  status: "starting",
+  version: "unknown",
+  platform: process.platform
+});
+
+function setResidentHealth(values) {
+  residentHealth = createResidentHealth({
+    ...residentHealth,
+    ...values
+  });
+}
+
+function compatibilityTarget(installation, target) {
+  return `${installation.packageVersion}/${installation.appVersion}/${target.selectorContract}`;
+}
 
 async function log(message) {
   await appendFile(logPath, `${new Date().toISOString()} ${message}\n`, "utf8").catch(() => {});
@@ -52,15 +77,6 @@ async function readIgnoredProcessId() {
   const storedValue = Number((await readFile(ignorePath, "utf8").catch(() => "")).trim());
   await rm(ignorePath, { force: true }).catch(() => {});
   return Number.isInteger(storedValue) && storedValue > 0 ? storedValue : null;
-}
-
-async function reserveResidentLock() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(19333, "127.0.0.1", resolve);
-  });
-  return server;
 }
 
 async function assertLoopbackPortAvailable(port) {
@@ -99,7 +115,7 @@ async function waitForMainExit(executablePath, processId) {
   throw new Error(`普通 Codex 进程 ${processId} 未按预期退出`);
 }
 
-function runInjector(attach) {
+function startInjector(attach, attemptId) {
   const output = openSync(logPath, "a");
   const child = spawn(
     process.execPath,
@@ -108,10 +124,14 @@ function runInjector(attach) {
       cwd: projectRoot,
       detached: false,
       stdio: ["ignore", output, output],
-      windowsHide: process.platform === "win32"
+      windowsHide: process.platform === "win32",
+      env: {
+        ...process.env,
+        CODEX_EFFICIENCY_INSTALL_ATTEMPT: attemptId
+      }
     }
   );
-  return new Promise((resolve) => {
+  const completion = new Promise((resolve) => {
     let settled = false;
     const finish = (result) => {
       if (settled) return;
@@ -122,16 +142,126 @@ function runInjector(attach) {
     child.once("error", (error) => finish({ code: null, signal: null, error }));
     child.once("exit", (code, signal) => finish({ code, signal, error: null }));
   });
+  return { child, completion };
+}
+
+function assertUiReadyMarker(marker, { attemptId, version, platform, target, maxAgeMs }) {
+  const heartbeatAt = Date.parse(marker?.heartbeatAt ?? "");
+  if (
+    marker?.status !== "ready" ||
+    marker.attemptId !== attemptId ||
+    marker.version !== version ||
+    marker.platform !== platform ||
+    marker.target !== target ||
+    marker.entryLabel !== "效率" ||
+    !Number.isInteger(marker.optionCount) ||
+    marker.optionCount <= 0 ||
+    !Number.isInteger(marker.numericScoreCount) ||
+    marker.numericScoreCount < 2 ||
+    marker.valuesMatchSnapshot !== true ||
+    marker.numericScoreCount !== marker.expectedValueCount ||
+    !Number.isFinite(Date.parse(marker?.fullUiVerifiedAt ?? "")) ||
+    !Number.isFinite(heartbeatAt) ||
+    Date.now() - heartbeatAt > maxAgeMs
+  ) {
+    throw new Error("选择器端到端证据无效或与当前运行时不一致");
+  }
+  assertFullUiVerificationHistory(marker);
+  return marker;
+}
+
+async function runVerifiedInjector(attach, config, expected) {
+  await rm(uiReadyPath, { force: true }).catch(() => {});
+  setResidentHealth({
+    status: "activating",
+    uiVerified: false,
+    valuesLoaded: false,
+    evidence: null
+  });
+  const session = startInjector(attach, expected.attemptId);
+  const deadline = Date.now() + config.installVerificationTimeoutMs;
+  let verifiedOnce = false;
+  let lastHeartbeatAt = null;
+
+  while (verifiedOnce || Date.now() < deadline) {
+    const completed = await Promise.race([
+      session.completion.then((result) => ({ done: true, result })),
+      sleep(250).then(() => ({ done: false }))
+    ]);
+    if (completed.done) {
+      if (verifiedOnce) {
+        setResidentHealth({
+          status: "armed",
+          uiVerified: false,
+          valuesLoaded: false,
+          evidence: null
+        });
+      }
+      if (injectorDeferred(completed.result)) return completed.result;
+      if (verifiedOnce) return completed.result;
+      return {
+        ...completed.result,
+        error: completed.result.error ?? new Error("注入器在模型选择器端到端验证前退出")
+      };
+    }
+
+    try {
+      const marker = assertUiReadyMarker(
+        JSON.parse(await readFile(uiReadyPath, "utf8")),
+        { ...expected, maxAgeMs: config.uiHealthMaxAgeMs }
+      );
+      verifiedOnce = true;
+      await rm(activationRequestPath, { force: true }).catch(() => {});
+      if (marker.heartbeatAt !== lastHeartbeatAt || residentHealth.status !== "active") {
+        setResidentHealth({
+          status: "active",
+          uiVerified: true,
+          valuesLoaded: true,
+          evidence: marker
+        });
+        if (lastHeartbeatAt == null) {
+          await log(
+            `安装完成证据已确认：效率入口与 ${marker.numericScoreCount} 个数值已在真实模型选择器中显示。`
+          );
+        }
+        lastHeartbeatAt = marker.heartbeatAt;
+      }
+    } catch {
+      if (verifiedOnce) {
+        setResidentHealth({
+          status: "activating",
+          uiVerified: false,
+          valuesLoaded: false,
+          evidence: null
+        });
+      }
+      // UI 证据尚未写入、已经失效或仍在原子替换过程中；继续等待。
+    }
+  }
+
+  session.child.kill("SIGTERM");
+  const result = await session.completion;
+  return {
+    ...result,
+    error: result.error ?? new Error("真实模型选择器未在安装时限内持续显示效率入口和数值")
+  };
 }
 
 async function tripCircuitBreaker(reason, details = {}) {
   const state = circuitBreakerState(reason, details);
+  setResidentHealth({ status: "disabled", disabled: true });
   await writeFile(disabledPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
   await log(`安全熔断已触发，选择器增强保持关闭：${reason}`);
 }
 
 async function restoreStandardCodex(installation) {
-  const running = await findCodexMainProcess(installation.executablePath).catch(() => null);
+  let running = await findCodexMainProcess(installation.executablePath).catch(() => null);
+  if (running?.commandLine.includes("--remote-debugging-port=")) {
+    await log(`正在结束失效的调试模式 Codex 进程：${running.processId}`);
+    await terminateCodexMainProcess(running.processId);
+    await waitForMainExit(installation.executablePath, running.processId);
+    running = null;
+  }
   if (running) {
     await log(
       `未请求标准 Codex 重启：已有主进程 ${running.processId}，为避免再次中断而保留当前客户端。`
@@ -191,18 +321,31 @@ async function main() {
   });
   const packagePollMs = positiveSetting(config.packagePollMs, 300000);
   const compatibilityRetryMs = positiveSetting(config.compatibilityRetryMs, 5000, 1000);
+  const runtimePackage = JSON.parse(
+    await readFile(path.join(projectRoot, "package.json"), "utf8")
+  );
+  const installAttempt = JSON.parse(
+    (await readFile(installAttemptPath, "utf8").catch(() =>
+      JSON.stringify({ attemptId: "runtime" })
+    )).replace(/^\uFEFF/, "")
+  );
+  setResidentHealth({ version: runtimePackage.version });
 
   let lock;
   try {
-    lock = await reserveResidentLock();
+    lock = await listenForResidentHealth(() => residentHealth);
   } catch (error) {
     if (error?.code === "EADDRINUSE") return;
     throw error;
   }
 
-  const ignoredProcessId = await readIgnoredProcessId();
+  const activationRequested = await readFile(activationRequestPath, "utf8").then(
+    () => true,
+    () => false
+  );
+  const ignoredProcessId = activationRequested ? null : await readIgnoredProcessId();
   let ignoredStillRunning = ignoredProcessId != null;
-  let pendingEnhancedLaunch = false;
+  let pendingEnhancedLaunch = activationRequested;
   let installation = null;
   let target = null;
   let packageStamp = "";
@@ -211,7 +354,10 @@ async function main() {
   let unreviewedProcessId = null;
   let lastPackageError = "";
   let preflightIdentity = "";
-  await log(`常驻监视器已启动；忽略当前进程：${ignoredProcessId ?? "无"}`);
+  await log(
+    `常驻监视器已启动；立即激活：${activationRequested ? "是" : "否"}；` +
+    `忽略当前进程：${ignoredProcessId ?? "无"}`
+  );
 
   async function refreshCompatibility(force) {
     const result = await compatibilityRefresher({ force });
@@ -341,6 +487,16 @@ async function main() {
       return;
     }
 
+    setResidentHealth({
+      status: "armed",
+      platform: installation.platform,
+      target: compatibilityTarget(installation, target),
+      disabled: false,
+      uiVerified: false,
+      valuesLoaded: false,
+      evidence: null
+    });
+
     let running;
     try {
       running = await findCodexMainProcess(installation.executablePath);
@@ -366,8 +522,14 @@ async function main() {
         try {
           await assertLoopbackPortAvailable(config.devtoolsPort);
           await log("正在按效率模式启动 Codex。");
-          const result = await runInjector(false);
+          const result = await runVerifiedInjector(false, config, {
+            version: runtimePackage.version,
+            platform: installation.platform,
+            target: compatibilityTarget(installation, target),
+            attemptId: installAttempt.attemptId
+          });
           if (injectorDeferred(result)) {
+            setResidentHealth({ status: "armed" });
             await log("普通 Codex 在增强启动前先行出现；返回监视循环处理。");
             continue;
           }
@@ -404,7 +566,12 @@ async function main() {
     const debugFlag = `--remote-debugging-port=${config.devtoolsPort}`;
     if (running.commandLine.includes(debugFlag)) {
       await log(`连接效率模式进程：${running.processId}`);
-      const result = await runInjector(true);
+      const result = await runVerifiedInjector(true, config, {
+        version: runtimePackage.version,
+        platform: installation.platform,
+        target: compatibilityTarget(installation, target),
+        attemptId: installAttempt.attemptId
+      });
       if (injectorFailed(result)) {
         if (await changedDuringInjector(installationIdentity(installation))) continue;
         await tripCircuitBreaker(injectorFailureReason(result), {
@@ -428,8 +595,14 @@ async function main() {
       await terminateCodexMainProcess(running.processId);
       await waitForMainExit(installation.executablePath, running.processId);
       await log("正在按效率模式重新启动 Codex。");
-      const result = await runInjector(false);
+      const result = await runVerifiedInjector(false, config, {
+        version: runtimePackage.version,
+        platform: installation.platform,
+        target: compatibilityTarget(installation, target),
+        attemptId: installAttempt.attemptId
+      });
       if (injectorDeferred(result)) {
+        setResidentHealth({ status: "armed" });
         await log("新的普通 Codex 在受控重启期间先行出现；返回监视循环处理。");
         continue;
       }
